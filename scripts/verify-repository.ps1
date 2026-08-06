@@ -40,7 +40,8 @@ $RequiredPaths = @(
     "tests\test-evidence.ps1",
     "tests\test-state.ps1",
     "tests\test-cli-state.ps1",
-    "tests\test-findings.ps1"
+    "tests\test-findings.ps1",
+    "tests\test-run-finding-state.ps1"
 )
 
 $Failures = @()
@@ -112,7 +113,8 @@ $TestScripts = @(
     "tests\test-evidence.ps1",
     "tests\test-state.ps1",
     "tests\test-cli-state.ps1",
-    "tests\test-findings.ps1"
+    "tests\test-findings.ps1",
+    "tests\test-run-finding-state.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

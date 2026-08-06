@@ -22,7 +22,17 @@ the run. Its value must match `run-state.json`.
 ## Checkpoints
 
 A checkpoint records the current phase, current task, completed tasks,
-unresolved findings, blockers, summary, and exact next action.
+unresolved finding IDs, blockers, summary, and exact next action.
+
+## Persisted finding state
+
+`run-state.json` stores the complete `findings` collection and the latest
+`findingGate` result. `unresolvedFindings` contains only the IDs of findings
+whose status is `OPEN` or `REPAIRED_PENDING_REVIEW`.
+
+Whenever finding state changes, the gate is recalculated and its
+`nextAction` becomes the exact run-level next action. The same value is
+written atomically to both `run-state.json` and `next-action.txt`.
 
 ## Terminal states
 
@@ -35,6 +45,7 @@ unresolved findings, blockers, summary, and exact next action.
 - `ABORTED_FOR_SAFETY`
 
 Runtime state is local and must not be committed by default.
+
 ## CLI commands
 
 - `run-init` creates a durable run.

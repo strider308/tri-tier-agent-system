@@ -234,6 +234,8 @@ function New-TriTierRun {
         currentTask         = $CurrentTask
         completedTasks      = @()
         unresolvedFindings  = @()
+        findings            = @()
+        findingGate         = $null
         blockers            = @()
         planPath            = $StoredPlanPath
         planHash            = $PlanHash
@@ -443,6 +445,91 @@ function Set-TriTierRunStatus {
     $State
 }
 
+function Set-TriTierRunFindingState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProjectPath,
+
+        [Parameter(Mandatory)]
+        [string]$RunId,
+
+        [Parameter()]
+        [object[]]$Findings = @(),
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object]$FindingGate
+    )
+
+    if (
+        $null -eq $FindingGate.PSObject.Properties['nextAction'] -or
+        [string]::IsNullOrWhiteSpace([string]$FindingGate.nextAction)
+    ) {
+        throw 'Finding gate must provide a non-empty nextAction.'
+    }
+
+    $FindingIds = @(
+        $Findings | ForEach-Object {
+            if (
+                $null -eq $_.PSObject.Properties['findingId'] -or
+                [string]::IsNullOrWhiteSpace([string]$_.findingId)
+            ) {
+                throw 'Every persisted finding must provide a findingId.'
+            }
+
+            [string]$_.findingId
+        }
+    )
+
+    $DuplicateFindingIds = @(
+        $FindingIds | Group-Object | Where-Object Count -gt 1 | Select-Object -ExpandProperty Name
+    )
+
+    if ($DuplicateFindingIds.Count -gt 0) {
+        throw (
+            'Duplicate finding IDs cannot be persisted: ' +
+            ($DuplicateFindingIds -join ', ')
+        )
+    }
+
+    $RunDirectory = Get-TriTierRunDirectory `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $State = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $ActiveFindingIds = @(
+        $Findings |
+            Where-Object {
+                $_.status -in @(
+                    'OPEN',
+                    'REPAIRED_PENDING_REVIEW'
+                )
+            } |
+            ForEach-Object {
+                [string]$_.findingId
+            }
+    )
+
+    $State.findings = @($Findings)
+    $State.unresolvedFindings = $ActiveFindingIds
+    $State.findingGate = $FindingGate
+    $State.nextAction = ([string]$FindingGate.nextAction).Trim()
+    $State.updatedUtc = [DateTime]::UtcNow.ToString('o')
+
+    Write-TriTierAtomicJson `
+        -Path (Join-Path $RunDirectory 'state\run-state.json') `
+        -InputObject $State
+
+    Write-TriTierAtomicText `
+        -Path (Join-Path $RunDirectory 'state\next-action.txt') `
+        -Content ($State.nextAction + "`n")
+
+    $State
+}
 function Test-TriTierRunState {
     [CmdletBinding()]
     param(
@@ -574,6 +661,7 @@ Export-ModuleMember -Function @(
     "Set-TriTierNextAction",
     "New-TriTierCheckpoint",
     "Set-TriTierRunStatus",
+    "Set-TriTierRunFindingState",
     "Test-TriTierRunState",
     "Get-TriTierRunResumeData"
 )

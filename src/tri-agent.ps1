@@ -65,6 +65,7 @@ $ModulePaths = @{
     Classification = Join-Path $PSScriptRoot "TriTier\Classification.psm1"
     Risk = Join-Path $PSScriptRoot "TriTier\Risk.psm1"
     Evidence = Join-Path $PSScriptRoot "TriTier\Evidence.psm1"
+    Findings = Join-Path $PSScriptRoot "TriTier\Findings.psm1"
     State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
 

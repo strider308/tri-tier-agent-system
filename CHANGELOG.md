@@ -43,6 +43,7 @@ All notable changes will be documented here.
 - Added `run-resume` for exact next-action recovery
 - Added `run-status` for explicit status inspection and updates
 - Added end-to-end state CLI tests
+
 ### Fixed
 
 - Reset successful repository verification to exit status zero instead of
@@ -56,3 +57,11 @@ All notable changes will be documented here.
 - Added owner-approved deferrals.
 - Prohibited deferral of critical findings.
 - Added deterministic next-action generation.
+
+### Durable finding state
+
+- Persisted complete finding records in durable run state.
+- Persisted active finding IDs and the current finding gate.
+- Synchronized gate-derived next actions with `next-action.txt`.
+- Added resume coverage for finding-controlled next actions.
+- Added repository verification for run/finding-state integration.
