@@ -87,3 +87,11 @@ All notable changes will be documented here.
 - Added stable event IDs for idempotent transition replay.
 - Persisted transition history, actors, evidence IDs, review outcome, previous stage, and exact next action.
 - Kept failed reviews blocked until the finding-repair integration milestone authorizes continuation.
+
+### Atomic task-flow and finding state
+
+- Added one durable write boundary for task flow, findings, finding gate, optional run status, and exact next action.
+- Reserved REPAIR, FRESH_REVIEW, and ADJUDICATE as integrated stages linked to one active finding.
+- Prevented integrated repair stages from being persisted without the required finding status.
+- Added repair linkage and resume metadata to durable task flow.
+- Preserved final task REVIEW after a successful fresh repair review.

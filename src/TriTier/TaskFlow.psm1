@@ -235,6 +235,13 @@ function Initialize-TriTierRunTaskFlow {
         reviewOutcome = 'NOT_STARTED'
         reviewSummary = ''
         reviewEvidenceIds = @()
+        activeRepairFindingId = ''
+        lastRepairFindingId = ''
+        repairResumeStage = ''
+        repairActor = ''
+        repairReviewActor = ''
+        repairReviewOutcome = 'NOT_STARTED'
+        adjudicationDecision = ''
         nextAction = $NextAction
         revision = 0
         transitionHistory = @()

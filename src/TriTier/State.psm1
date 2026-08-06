@@ -608,6 +608,224 @@ function Set-TriTierRunTaskFlowState {
     $State
 }
 
+function Set-TriTierRunIntegratedState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProjectPath,
+
+        [Parameter(Mandatory)]
+        [string]$RunId,
+
+        [Parameter()]
+        [object[]]$Findings = @(),
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object]$FindingGate,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object]$TaskFlowState,
+
+        [Parameter()]
+        [string]$RunStatus = ''
+    )
+
+    if (
+        $null -eq $FindingGate.PSObject.Properties['nextAction'] -or
+        [string]::IsNullOrWhiteSpace([string]$FindingGate.nextAction)
+    ) {
+        throw 'Finding gate must provide a non-empty nextAction.'
+    }
+
+    foreach ($Property in @(
+        'schemaVersion',
+        'stage',
+        'previousStage',
+        'responsibleParty',
+        'mayAdvance',
+        'currentTask',
+        'implementationActor',
+        'reviewActor',
+        'reviewOutcome',
+        'nextAction',
+        'revision',
+        'transitionHistory',
+        'activeRepairFindingId',
+        'lastRepairFindingId',
+        'repairResumeStage',
+        'repairActor',
+        'repairReviewActor',
+        'repairReviewOutcome',
+        'adjudicationDecision'
+    )) {
+        if ($null -eq $TaskFlowState.PSObject.Properties[$Property]) {
+            throw "Integrated task flow is missing required property: $Property"
+        }
+    }
+
+    if ($TaskFlowState.stage -notin @(
+        'PLAN',
+        'IMPLEMENT',
+        'REVIEW',
+        'REPAIR',
+        'FRESH_REVIEW',
+        'ADJUDICATE',
+        'CONTINUE'
+    )) {
+        throw "Unsupported integrated task-flow stage: $($TaskFlowState.stage)"
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$TaskFlowState.nextAction)) {
+        throw 'Integrated task flow must provide a non-empty nextAction.'
+    }
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($RunStatus) -and
+        $RunStatus -notin $script:AllowedRunStatuses
+    ) {
+        throw "Unsupported Tri-Tier run status: $RunStatus"
+    }
+
+    $FindingIds = @(
+        $Findings | ForEach-Object {
+            if (
+                $null -eq $_.PSObject.Properties['findingId'] -or
+                [string]::IsNullOrWhiteSpace([string]$_.findingId)
+            ) {
+                throw 'Every integrated finding must provide a findingId.'
+            }
+
+            [string]$_.findingId
+        }
+    )
+
+    $DuplicateFindingIds = @(
+        $FindingIds |
+            Group-Object |
+            Where-Object Count -gt 1 |
+            Select-Object -ExpandProperty Name
+    )
+
+    if ($DuplicateFindingIds.Count -gt 0) {
+        throw (
+            'Duplicate finding IDs cannot be persisted: ' +
+            ($DuplicateFindingIds -join ', ')
+        )
+    }
+
+    $ActiveFindings = @(
+        $Findings |
+            Where-Object {
+                $_.status -in @(
+                    'OPEN',
+                    'REPAIRED_PENDING_REVIEW'
+                )
+            }
+    )
+
+    $ActiveFindingIds = @(
+        $ActiveFindings |
+            ForEach-Object {
+                [string]$_.findingId
+            }
+    )
+
+    $RepairStages = @(
+        'REPAIR',
+        'FRESH_REVIEW',
+        'ADJUDICATE'
+    )
+
+    $ActiveRepairFindingId = [string]$TaskFlowState.activeRepairFindingId
+
+    if ($TaskFlowState.stage -in $RepairStages) {
+        if ([string]::IsNullOrWhiteSpace($ActiveRepairFindingId)) {
+            throw (
+                "Integrated stage $($TaskFlowState.stage) requires " +
+                'activeRepairFindingId.'
+            )
+        }
+
+        $LinkedFindings = @(
+            $ActiveFindings |
+                Where-Object {
+                    [string]$_.findingId -eq $ActiveRepairFindingId
+                }
+        )
+
+        if ($LinkedFindings.Count -ne 1) {
+            throw (
+                "Integrated stage $($TaskFlowState.stage) requires exactly " +
+                "one active linked finding '$ActiveRepairFindingId'; found " +
+                "$($LinkedFindings.Count)."
+            )
+        }
+
+        $LinkedFinding = $LinkedFindings[0]
+
+        if (
+            $TaskFlowState.stage -eq 'FRESH_REVIEW' -and
+            $LinkedFinding.status -ne 'REPAIRED_PENDING_REVIEW'
+        ) {
+            throw (
+                'FRESH_REVIEW requires a linked finding in ' +
+                'REPAIRED_PENDING_REVIEW status.'
+            )
+        }
+
+        if (
+            $TaskFlowState.stage -in @('REPAIR', 'ADJUDICATE') -and
+            $LinkedFinding.status -ne 'OPEN'
+        ) {
+            throw (
+                "$($TaskFlowState.stage) requires a linked finding " +
+                'in OPEN status.'
+            )
+        }
+    }
+    else {
+        if (-not [string]::IsNullOrWhiteSpace($ActiveRepairFindingId)) {
+            throw (
+                "Integrated stage $($TaskFlowState.stage) cannot retain " +
+                'activeRepairFindingId.'
+            )
+        }
+    }
+
+    $RunDirectory = Get-TriTierRunDirectory `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $State = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $State.findings = @($Findings)
+    $State.unresolvedFindings = $ActiveFindingIds
+    $State.findingGate = $FindingGate
+    $State.taskFlow = $TaskFlowState
+    $State.currentTask = [string]$TaskFlowState.currentTask
+    $State.nextAction = ([string]$TaskFlowState.nextAction).Trim()
+
+    if (-not [string]::IsNullOrWhiteSpace($RunStatus)) {
+        $State.status = $RunStatus
+    }
+
+    $State.updatedUtc = [DateTime]::UtcNow.ToString('o')
+
+    Write-TriTierAtomicJson `
+        -Path (Join-Path $RunDirectory 'state\run-state.json') `
+        -InputObject $State
+
+    Write-TriTierAtomicText `
+        -Path (Join-Path $RunDirectory 'state\next-action.txt') `
+        -Content ($State.nextAction + "`n")
+
+    $State
+}
+
 function Test-TriTierRunState {
     [CmdletBinding()]
     param(
@@ -740,6 +958,7 @@ Export-ModuleMember -Function @(
     "New-TriTierCheckpoint",
     "Set-TriTierRunStatus",
     "Set-TriTierRunFindingState",
+    "Set-TriTierRunIntegratedState",
     "Set-TriTierRunTaskFlowState",
     "Test-TriTierRunState",
     "Get-TriTierRunResumeData"
