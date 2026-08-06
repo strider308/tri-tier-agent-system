@@ -47,3 +47,12 @@ All notable changes will be documented here.
 
 - Reset successful repository verification to exit status zero instead of
   leaking a stale native-command exit status from an internal check.
+
+### Finding model
+
+- Added INFO, LOW, MEDIUM, HIGH, and CRITICAL finding severities.
+- Added task, phase, and run blocking rules.
+- Added repair and independent fresh-review transitions.
+- Added owner-approved deferrals.
+- Prohibited deferral of critical findings.
+- Added deterministic next-action generation.
