@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "orchestration-status", "phase-start", "phase-ready", "phase-review", "phase-accept", "phase-reject", "phase-status", "doctor", "version")]
+    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "orchestration-status", "phase-start", "phase-ready", "phase-review", "phase-accept", "phase-reject", "phase-status", "exec", "exec-resume", "exec-status", "doctor", "version")]
     [string]$Command = "doctor",
 
     [Parameter()]
@@ -114,6 +114,27 @@ param(
 
     [Parameter()]
     [switch]$EvidenceIndependent,
+    [Parameter()]
+    [string]$DispatcherPath = "",
+
+    [Parameter()]
+    [ValidateRange(1, 10000)]
+    [int]$MaxSteps = 25,
+
+    [Parameter()]
+    [ValidateRange(1, 100)]
+    [int]$MaxSameDecision = 2,
+
+    [Parameter()]
+    [ValidateRange(1, 20)]
+    [int]$MaxAttemptsPerAction = 2,
+
+    [Parameter()]
+    [ValidateRange(1, 86400)]
+    [int]$StepTimeoutSeconds = 1800,
+
+    [Parameter()]
+    [switch]$DryRun,
 [Parameter()]
     [switch]$Json
 )
@@ -131,6 +152,7 @@ $ModulePaths = @{
     RepairCycle = Join-Path $PSScriptRoot "TriTier\RepairCycle.psm1"
     Orchestration = Join-Path $PSScriptRoot "TriTier\Orchestration.psm1"
     PhaseGate = Join-Path $PSScriptRoot "TriTier\PhaseGate.psm1"
+    ExecutionLoop = Join-Path $PSScriptRoot "TriTier\ExecutionLoop.psm1"
     State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
 
@@ -503,6 +525,148 @@ function New-TriTierCliPhaseResult {
         updatedUtc = [string](
             Get-TriTierCliObjectProperty `
                 -InputObject $State `
+                -Name 'updatedUtc' `
+                -DefaultValue ''
+        )
+    }
+}
+
+function New-TriTierCliExecutionResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object]$ExecutionResult
+    )
+
+    $LoopState = Get-TriTierCliObjectProperty `
+        -InputObject $ExecutionResult `
+        -Name 'loop' `
+        -Required
+    $RunState = Get-TriTierCliObjectProperty `
+        -InputObject $ExecutionResult `
+        -Name 'state' `
+        -Required
+    $Decision = Get-TriTierCliObjectProperty `
+        -InputObject $ExecutionResult `
+        -Name 'decision' `
+        -Required
+    $Envelope = Get-TriTierCliObjectProperty `
+        -InputObject $ExecutionResult `
+        -Name 'envelope' `
+        -DefaultValue $null
+
+    [PSCustomObject][ordered]@{
+        runId = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $RunState `
+                -Name 'runId' `
+                -Required
+        )
+        runStatus = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $RunState `
+                -Name 'status' `
+                -Required
+        )
+        loopStatus = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $LoopState `
+                -Name 'status' `
+                -Required
+        )
+        step = [int](
+            Get-TriTierCliObjectProperty `
+                -InputObject $LoopState `
+                -Name 'currentStep' `
+                -DefaultValue 0
+        )
+        stage = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'stage' `
+                -Required
+        )
+        responsibleParty = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'responsibleParty' `
+                -Required
+        )
+        blockedScope = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'blockedScope' `
+                -DefaultValue 'NONE'
+        )
+        canContinue = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'canContinue' `
+                -Required
+        )
+        ownerRequired = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'ownerRequired' `
+                -DefaultValue $false
+        )
+        findingId = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'findingId' `
+                -DefaultValue ''
+        )
+        phaseId = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'phaseId' `
+                -DefaultValue ''
+        )
+        dispatched = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ExecutionResult `
+                -Name 'dispatched' `
+                -DefaultValue $false
+        )
+        dryRun = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ExecutionResult `
+                -Name 'dryRun' `
+                -DefaultValue $false
+        )
+        actionKey = if ($null -eq $Envelope) {
+            ''
+        }
+        else {
+            [string](
+                Get-TriTierCliObjectProperty `
+                    -InputObject $Envelope `
+                    -Name 'actionKey' `
+                    -DefaultValue ''
+            )
+        }
+        dispatcherPath = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $LoopState `
+                -Name 'dispatcherPath' `
+                -DefaultValue ''
+        )
+        stopReason = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $LoopState `
+                -Name 'stopReason' `
+                -DefaultValue ''
+        )
+        nextAction = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name 'nextAction' `
+                -Required
+        )
+        updatedUtc = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $LoopState `
                 -Name 'updatedUtc' `
                 -DefaultValue ''
         )
@@ -1737,6 +1901,117 @@ switch ($Command) {
     break
 }
 
+"exec" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The exec command requires -RunId."
+    }
+
+    $ExecutionArguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        MaxSteps = $MaxSteps
+        MaxSameDecision = $MaxSameDecision
+        MaxAttemptsPerAction = $MaxAttemptsPerAction
+        StepTimeoutSeconds = $StepTimeoutSeconds
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($DispatcherPath)) {
+        $ExecutionArguments.DispatcherPath = $DispatcherPath
+    }
+
+    if ($DryRun) {
+        $ExecutionArguments.DryRun = $true
+    }
+
+    $ExecutionInvocation = Invoke-TriTierRunExecutionLoop @ExecutionArguments
+
+    $ExecutionOutput = New-TriTierCliExecutionResult `
+        -ExecutionResult $ExecutionInvocation
+
+    if ($Json) {
+        $ExecutionOutput | ConvertTo-Json -Depth 60
+    }
+    else {
+        $ExecutionOutput | Format-List
+    }
+
+    break
+}
+
+"exec-resume" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The exec-resume command requires -RunId."
+    }
+
+    $ExecutionArguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        MaxSteps = $MaxSteps
+        MaxSameDecision = $MaxSameDecision
+        MaxAttemptsPerAction = $MaxAttemptsPerAction
+        StepTimeoutSeconds = $StepTimeoutSeconds
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($DispatcherPath)) {
+        $ExecutionArguments.DispatcherPath = $DispatcherPath
+    }
+
+    if ($DryRun) {
+        $ExecutionArguments.DryRun = $true
+    }
+
+    $ExecutionInvocation = Resume-TriTierRunExecutionLoop @ExecutionArguments
+
+    $ExecutionOutput = New-TriTierCliExecutionResult `
+        -ExecutionResult $ExecutionInvocation
+
+    if ($Json) {
+        $ExecutionOutput | ConvertTo-Json -Depth 60
+    }
+    else {
+        $ExecutionOutput | Format-List
+    }
+
+    break
+}
+
+"exec-status" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The exec-status command requires -RunId."
+    }
+
+    $ExecutionLoopState = Get-TriTierRunExecutionLoop `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+    $ExecutionRunState = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+    $ExecutionDecision = Get-TriTierRunOrchestrationDecision `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $ExecutionInvocation = [PSCustomObject][ordered]@{
+        loop = $ExecutionLoopState
+        state = $ExecutionRunState
+        decision = $ExecutionDecision
+        envelope = $null
+        dispatched = $false
+        dryRun = $false
+    }
+
+    $ExecutionOutput = New-TriTierCliExecutionResult `
+        -ExecutionResult $ExecutionInvocation
+
+    if ($Json) {
+        $ExecutionOutput | ConvertTo-Json -Depth 60
+    }
+    else {
+        $ExecutionOutput | Format-List
+    }
+
+    break
+}
+
     "doctor" {
         $RequiredAgents = @(
             "luna-router.toml",
@@ -1790,7 +2065,7 @@ switch ($Command) {
     }
 
     "version" {
-        "tri-tier-agent-system 0.7.0-alpha"
+        "tri-tier-agent-system 0.8.0-alpha"
         break
     }
 }

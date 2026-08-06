@@ -124,3 +124,14 @@ All notable changes will be documented here.
 - Added orchestration and phase-gate CLI commands with normalized JSON output.
 - Added module, CLI, owner-gate, finding-block, evidence-block, and exact-next-action tests.
 - Advanced the CLI version to `0.7.0-alpha`.
+
+### Durable automatic execution loop
+
+- Added a durable dispatcher-driven execution loop that consumes deterministic orchestration decisions.
+- Added stable action keys, exclusive run locks, in-flight markers, child-process timeouts, and restart recovery.
+- Added pre-dispatch and post-dispatch checkpoints through the existing state contract.
+- Added owner, external-dependency, blocked, terminal, step-limit, retry-limit, and stall stops.
+- Added fail-closed dispatcher result validation and durable failure records.
+- Added exec, exec-resume, and exec-status CLI commands plus dry-run envelope preview.
+- Added execution-loop and CLI tests covering completion, owner gates, external waits, stalls, recovery, and invalid results.
+- Advanced the CLI version to `0.8.0-alpha`.

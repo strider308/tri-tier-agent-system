@@ -237,7 +237,7 @@ try {
         throw "CLI version command failed with exit code $LASTEXITCODE."
     }
 
-    Assert-Equal -Name 'CLI version advanced' -Expected 'tri-tier-agent-system 0.7.0-alpha' -Actual (($Version -join '').Trim())
+    Assert-Equal -Name 'CLI version advanced' -Expected 'tri-tier-agent-system 0.8.0-alpha' -Actual (($Version -join '').Trim())
 
     Write-Host 'Finding CLI tests passed.' -ForegroundColor Green
 }
