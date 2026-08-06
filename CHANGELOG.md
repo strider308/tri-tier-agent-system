@@ -43,3 +43,7 @@ All notable changes will be documented here.
 - Added `run-resume` for exact next-action recovery
 - Added `run-status` for explicit status inspection and updates
 - Added end-to-end state CLI tests
+### Fixed
+
+- Reset successful repository verification to exit status zero instead of
+  leaking a stale native-command exit status from an internal check.

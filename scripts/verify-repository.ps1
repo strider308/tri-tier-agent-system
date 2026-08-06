@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+# A successful verifier run must not inherit a stale native-command status.
+$global:LASTEXITCODE = 0
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 
@@ -125,3 +127,7 @@ if ($Failures.Count -gt 0) {
 
 Write-Host ""
 Write-Host "Repository verification passed." -ForegroundColor Green
+
+# Native tools used by tests may leave a stale nonzero value even though
+# every PowerShell test and repository gate succeeded.
+$global:LASTEXITCODE = 0
