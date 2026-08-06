@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "doctor", "version")]
+    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "orchestration-status", "phase-start", "phase-ready", "phase-review", "phase-accept", "phase-reject", "phase-status", "doctor", "version")]
     [string]$Command = "doctor",
 
     [Parameter()]
@@ -106,6 +106,14 @@ param(
 
     [Parameter()]
     [string]$Decision = "",
+    [Parameter()]
+    [string]$PhaseRiskClass = "",
+
+    [Parameter()]
+    [string]$ObservedEvidenceLevel = "",
+
+    [Parameter()]
+    [switch]$EvidenceIndependent,
 [Parameter()]
     [switch]$Json
 )
@@ -121,6 +129,8 @@ $ModulePaths = @{
     FindingLifecycle = Join-Path $PSScriptRoot "TriTier\FindingLifecycle.psm1"
     TaskFlow = Join-Path $PSScriptRoot "TriTier\TaskFlow.psm1"
     RepairCycle = Join-Path $PSScriptRoot "TriTier\RepairCycle.psm1"
+    Orchestration = Join-Path $PSScriptRoot "TriTier\Orchestration.psm1"
+    PhaseGate = Join-Path $PSScriptRoot "TriTier\PhaseGate.psm1"
     State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
 
@@ -201,6 +211,301 @@ function New-TriTierCliFlowResult {
         replayed = $Replayed
         nextAction = [string]$State.nextAction
         updatedUtc = [string]$State.updatedUtc
+    }
+}
+
+function Get-TriTierCliObjectProperty {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object]$InputObject,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter()]
+        [AllowNull()]
+        [object]$DefaultValue = $null,
+
+        [Parameter()]
+        [switch]$Required
+    )
+
+    if ($null -ne $InputObject) {
+        if ($InputObject -is [System.Collections.IDictionary]) {
+            if ($InputObject.Contains($Name)) {
+                return $InputObject[$Name]
+            }
+        }
+        else {
+            $Property = $InputObject.PSObject.Properties[$Name]
+
+            if ($null -ne $Property) {
+                return $Property.Value
+            }
+        }
+    }
+
+    if ($Required) {
+        $TypeName = if ($null -eq $InputObject) {
+            '<null>'
+        }
+        else {
+            $InputObject.GetType().FullName
+        }
+
+        throw (
+            "Required CLI result property '$Name' is missing from " +
+            "object type $TypeName."
+        )
+    }
+
+    $DefaultValue
+}
+
+function Resolve-TriTierCliPhaseDecision {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object]$InputObject
+    )
+
+    $Candidates = @()
+
+    foreach ($Candidate in @($InputObject)) {
+        if ($null -eq $Candidate) {
+            continue
+        }
+
+        $Candidates += $Candidate
+
+        $NestedDecision = Get-TriTierCliObjectProperty `
+            -InputObject $Candidate `
+            -Name 'decision' `
+            -DefaultValue $null
+
+        if ($null -ne $NestedDecision) {
+            $Candidates += @($NestedDecision)
+        }
+    }
+
+    $MatchingCandidates = @(
+        $Candidates |
+            Where-Object {
+                $null -ne (
+                    Get-TriTierCliObjectProperty `
+                        -InputObject $_ `
+                        -Name 'stage' `
+                        -DefaultValue $null
+                )
+            }
+    )
+
+    if ($MatchingCandidates.Count -ne 1) {
+        $Shapes = @(
+            $Candidates |
+                ForEach-Object {
+                    $TypeName = $_.GetType().FullName
+                    $PropertyNames = @(
+                        $_.PSObject.Properties.Name
+                    ) -join ','
+
+                    "$TypeName[$PropertyNames]"
+                }
+        ) -join '; '
+
+        throw (
+            'Expected exactly one orchestration decision object containing ' +
+            "a stage property; found $($MatchingCandidates.Count). " +
+            "Observed shapes: $Shapes"
+        )
+    }
+
+    $Decision = $MatchingCandidates[0]
+
+    foreach ($RequiredProperty in @(
+        'stage',
+        'responsibleParty',
+        'canContinue',
+        'nextAction'
+    )) {
+        [void](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Decision `
+                -Name $RequiredProperty `
+                -Required
+        )
+    }
+
+    $Decision
+}
+
+function New-TriTierCliPhaseResult {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [object]$Phase = $null,
+
+        [Parameter(Mandatory)]
+        [object]$Decision,
+
+        [Parameter(Mandatory)]
+        [object]$State,
+
+        [Parameter()]
+        [bool]$Replayed = $false
+    )
+
+    $ResolvedDecision = Resolve-TriTierCliPhaseDecision `
+        -InputObject $Decision
+
+    $PhaseId = ''
+    $PhaseStatus = ''
+    $RiskClass = ''
+    $RequiredEvidenceLevel = ''
+    $ObservedEvidenceLevel = ''
+    $EvidenceIndependent = $false
+    $OwnerApprovalRequired = $false
+    $ReviewActor = ''
+    $ReviewDecision = ''
+
+    if ($null -ne $Phase) {
+        $PhaseId = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'phaseId' `
+                -DefaultValue ''
+        )
+        $PhaseStatus = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'status' `
+                -DefaultValue ''
+        )
+        $RiskClass = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'riskClass' `
+                -DefaultValue ''
+        )
+        $RequiredEvidenceLevel = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'requiredEvidenceLevel' `
+                -DefaultValue ''
+        )
+        $ObservedEvidenceLevel = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'observedEvidenceLevel' `
+                -DefaultValue ''
+        )
+        $EvidenceIndependent = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'evidenceIndependent' `
+                -DefaultValue $false
+        )
+        $OwnerApprovalRequired = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'ownerApprovalRequired' `
+                -DefaultValue $false
+        )
+        $ReviewActor = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'reviewActor' `
+                -DefaultValue ''
+        )
+        $ReviewDecision = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $Phase `
+                -Name 'reviewDecision' `
+                -DefaultValue ''
+        )
+    }
+
+    [PSCustomObject][ordered]@{
+        runId = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $State `
+                -Name 'runId' `
+                -Required
+        )
+        status = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $State `
+                -Name 'status' `
+                -Required
+        )
+        phaseId = $PhaseId
+        phaseStatus = $PhaseStatus
+        riskClass = $RiskClass
+        requiredEvidenceLevel = $RequiredEvidenceLevel
+        observedEvidenceLevel = $ObservedEvidenceLevel
+        evidenceIndependent = $EvidenceIndependent
+        ownerApprovalRequired = $OwnerApprovalRequired
+        reviewActor = $ReviewActor
+        reviewDecision = $ReviewDecision
+        stage = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'stage' `
+                -Required
+        )
+        responsibleParty = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'responsibleParty' `
+                -Required
+        )
+        blockedScope = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'blockedScope' `
+                -DefaultValue 'NONE'
+        )
+        canContinue = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'canContinue' `
+                -Required
+        )
+        ownerRequired = [bool](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'ownerRequired' `
+                -DefaultValue $false
+        )
+        findingId = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'findingId' `
+                -DefaultValue ''
+        )
+        replayed = $Replayed
+        reason = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'reason' `
+                -DefaultValue ''
+        )
+        nextAction = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $ResolvedDecision `
+                -Name 'nextAction' `
+                -Required
+        )
+        updatedUtc = [string](
+            Get-TriTierCliObjectProperty `
+                -InputObject $State `
+                -Name 'updatedUtc' `
+                -DefaultValue ''
+        )
     }
 }
 
@@ -1143,6 +1448,295 @@ switch ($Command) {
     break
 }
 
+"orchestration-status" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The orchestration-status command requires -RunId."
+    }
+
+    $State = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $OrchestrationDecision = Get-TriTierOrchestrationDecision `
+        -RunState $State
+
+    $Phase = $null
+
+    if (
+        $null -ne $State.PSObject.Properties['phaseGate'] -and
+        $null -ne $State.phaseGate
+    ) {
+        $Phase = $State.phaseGate
+    }
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $Phase `
+        -Decision $OrchestrationDecision `
+        -State $State
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"phase-start" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "PhaseId"; Value = $PhaseId },
+        @{ Name = "PhaseRiskClass"; Value = $PhaseRiskClass },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The phase-start command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($PhaseRiskClass -notin @("R0", "R1", "R2", "R3", "R4")) {
+        throw "The phase-start command requires -PhaseRiskClass R0 through R4."
+    }
+
+    $PhaseResult = Start-TriTierRunPhase `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId `
+        -PhaseId $PhaseId `
+        -RiskClass $PhaseRiskClass `
+        -StartedBy $Actor `
+        -EventId $EventId
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $PhaseResult.phase `
+        -Decision $PhaseResult.decision `
+        -State $PhaseResult.state `
+        -Replayed ([bool]$PhaseResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"phase-ready" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "ObservedEvidenceLevel"; Value = $ObservedEvidenceLevel },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The phase-ready command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($ObservedEvidenceLevel -notin @(
+        "E0", "E1", "E2", "E3", "E4", "E5"
+    )) {
+        throw "The phase-ready command requires -ObservedEvidenceLevel E0 through E5."
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        ObservedEvidenceLevel = $ObservedEvidenceLevel
+        IndependentEvidence = [bool]$EvidenceIndependent
+        SubmittedBy = $Actor
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($OwnerApprovalRecord)) {
+        $Arguments.OwnerApprovalRecord = $OwnerApprovalRecord
+    }
+
+    $PhaseResult = Submit-TriTierRunPhaseReady @Arguments
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $PhaseResult.phase `
+        -Decision $PhaseResult.decision `
+        -State $PhaseResult.state `
+        -Replayed ([bool]$PhaseResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"phase-review" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Decision"; Value = $Decision },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The phase-review command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($Decision -notin @("ACCEPT", "REJECT")) {
+        throw "The phase-review command requires -Decision ACCEPT or REJECT."
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Decision = $Decision
+        Summary = $Summary
+        Reviewer = $Actor
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $PhaseResult = Submit-TriTierRunPhaseReview @Arguments
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $PhaseResult.phase `
+        -Decision $PhaseResult.decision `
+        -State $PhaseResult.state `
+        -Replayed ([bool]$PhaseResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"phase-accept" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The phase-accept command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Decision = "ACCEPT"
+        Summary = $Summary
+        Reviewer = $Actor
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $PhaseResult = Submit-TriTierRunPhaseReview @Arguments
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $PhaseResult.phase `
+        -Decision $PhaseResult.decision `
+        -State $PhaseResult.state `
+        -Replayed ([bool]$PhaseResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"phase-reject" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The phase-reject command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Decision = "REJECT"
+        Summary = $Summary
+        Reviewer = $Actor
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $PhaseResult = Submit-TriTierRunPhaseReview @Arguments
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $PhaseResult.phase `
+        -Decision $PhaseResult.decision `
+        -State $PhaseResult.state `
+        -Replayed ([bool]$PhaseResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"phase-status" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The phase-status command requires -RunId."
+    }
+
+    $PhaseResult = Get-TriTierRunPhaseGate `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $Result = New-TriTierCliPhaseResult `
+        -Phase $PhaseResult.phase `
+        -Decision $PhaseResult.decision `
+        -State $PhaseResult.state `
+        -Replayed ([bool]$PhaseResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 40
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
     "doctor" {
         $RequiredAgents = @(
             "luna-router.toml",
@@ -1196,7 +1790,7 @@ switch ($Command) {
     }
 
     "version" {
-        "tri-tier-agent-system 0.6.0-alpha"
+        "tri-tier-agent-system 0.7.0-alpha"
         break
     }
 }

@@ -113,3 +113,14 @@ All notable changes will be documented here.
 - Added child-process end-to-end coverage for pass, retry, owner-gate, role rejection, and idempotent replay paths.
 - Added TaskFlow and RepairCycle modules to CLI doctor.
 - Advanced the CLI version to `0.6.0-alpha`.
+
+### Deterministic orchestration and phase gates
+
+- Added a read-only orchestration decision engine for task, repair, owner, external, terminal, and phase-review routing.
+- Added durable evidence-backed phase state with ACTIVE, blocked, reviewable, accepted, and rejected statuses.
+- Connected phase readiness to existing finding gates and evidence sufficiency checks.
+- Required independent evidence for R3 and R4 and owner approval for R4.
+- Added Sol-only phase acceptance and rejection with stable event replay protection.
+- Added orchestration and phase-gate CLI commands with normalized JSON output.
+- Added module, CLI, owner-gate, finding-block, evidence-block, and exact-next-action tests.
+- Advanced the CLI version to `0.7.0-alpha`.

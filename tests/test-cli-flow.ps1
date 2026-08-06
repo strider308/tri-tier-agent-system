@@ -490,7 +490,7 @@ try {
 
     Assert-Equal `
         -Name 'CLI version advanced' `
-        -Expected 'tri-tier-agent-system 0.6.0-alpha' `
+        -Expected 'tri-tier-agent-system 0.7.0-alpha' `
         -Actual (($VersionOutput -join '').Trim())
 
     Write-Host 'Task-flow and repair-cycle CLI tests passed.' -ForegroundColor Green

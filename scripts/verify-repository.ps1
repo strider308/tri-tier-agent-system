@@ -27,6 +27,9 @@ $RequiredPaths = @(
     "docs\integrated-state.md",
     "docs\repair-cycle.md",
     "docs\cli-flow.md",
+    "docs\orchestration.md",
+    "docs\phase-gates.md",
+    "docs\cli-phase.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "src\TriTier\Classification.psm1",
@@ -37,6 +40,8 @@ $RequiredPaths = @(
     "src\TriTier\FindingLifecycle.psm1",
     "src\TriTier\TaskFlow.psm1",
     "src\TriTier\RepairCycle.psm1",
+    "src\TriTier\Orchestration.psm1",
+    "src\TriTier\PhaseGate.psm1",
     "agents\luna-router.toml",
     "agents\luna-worker.toml",
     "agents\sol-adjudicator.toml",
@@ -55,7 +60,10 @@ $RequiredPaths = @(
     "tests\test-task-flow.ps1",
     "tests\test-integrated-state.ps1",
     "tests\test-repair-cycle.ps1",
-    "tests\test-cli-flow.ps1"
+    "tests\test-cli-flow.ps1",
+    "tests\test-orchestration.ps1",
+    "tests\test-phase-gate.ps1",
+    "tests\test-cli-phase.ps1"
 )
 
 $Failures = @()
@@ -134,7 +142,10 @@ $TestScripts = @(
     "tests\test-task-flow.ps1",
     "tests\test-integrated-state.ps1",
     "tests\test-repair-cycle.ps1",
-    "tests\test-cli-flow.ps1"
+    "tests\test-cli-flow.ps1",
+    "tests\test-orchestration.ps1",
+    "tests\test-phase-gate.ps1",
+    "tests\test-cli-phase.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

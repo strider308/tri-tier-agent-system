@@ -826,6 +826,128 @@ function Set-TriTierRunIntegratedState {
     $State
 }
 
+function Set-TriTierRunPhaseState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProjectPath,
+
+        [Parameter(Mandatory)]
+        [string]$RunId,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object]$PhaseState,
+
+        [Parameter()]
+        [string]$RunStatus = ''
+    )
+
+    foreach ($Property in @(
+        'schemaVersion',
+        'phaseId',
+        'status',
+        'riskClass',
+        'requiredEvidenceLevel',
+        'observedEvidenceLevel',
+        'evidenceIndependent',
+        'evidenceIds',
+        'ownerApprovalRequired',
+        'ownerApprovalRecord',
+        'reviewActor',
+        'reviewDecision',
+        'reviewSummary',
+        'reviewEvidenceIds',
+        'revision',
+        'history',
+        'nextAction',
+        'createdUtc',
+        'updatedUtc'
+    )) {
+        if ($null -eq $PhaseState.PSObject.Properties[$Property]) {
+            throw "Phase state is missing required property: $Property"
+        }
+    }
+
+    if ($PhaseState.status -notin @(
+        'ACTIVE',
+        'READY_FOR_REVIEW',
+        'BLOCKED_BY_FINDINGS',
+        'BLOCKED_BY_EVIDENCE',
+        'OWNER_DECISION_REQUIRED',
+        'ACCEPTED',
+        'REJECTED'
+    )) {
+        throw "Unsupported phase status: $($PhaseState.status)"
+    }
+
+    if ($PhaseState.riskClass -notin @(
+        'R0',
+        'R1',
+        'R2',
+        'R3',
+        'R4'
+    )) {
+        throw "Unsupported phase risk class: $($PhaseState.riskClass)"
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace([string]$PhaseState.phaseId) -or
+        [string]::IsNullOrWhiteSpace([string]$PhaseState.nextAction)
+    ) {
+        throw 'Phase state requires non-empty phaseId and nextAction.'
+    }
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($RunStatus) -and
+        $RunStatus -notin $script:AllowedRunStatuses
+    ) {
+        throw "Unsupported Tri-Tier run status: $RunStatus"
+    }
+
+    $RunDirectory = Get-TriTierRunDirectory `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $State = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    if ($null -eq $State.PSObject.Properties['phaseGate']) {
+        $State |
+            Add-Member `
+                -NotePropertyName phaseGate `
+                -NotePropertyValue $null
+    }
+
+    if ($null -eq $State.PSObject.Properties['currentPhase']) {
+        $State |
+            Add-Member `
+                -NotePropertyName currentPhase `
+                -NotePropertyValue ''
+    }
+
+    $State.phaseGate = $PhaseState
+    $State.currentPhase = [string]$PhaseState.phaseId
+    $State.nextAction = ([string]$PhaseState.nextAction).Trim()
+
+    if (-not [string]::IsNullOrWhiteSpace($RunStatus)) {
+        $State.status = $RunStatus
+    }
+
+    $State.updatedUtc = [DateTime]::UtcNow.ToString('o')
+
+    Write-TriTierAtomicJson `
+        -Path (Join-Path $RunDirectory 'state\run-state.json') `
+        -InputObject $State
+
+    Write-TriTierAtomicText `
+        -Path (Join-Path $RunDirectory 'state\next-action.txt') `
+        -Content ($State.nextAction + "`n")
+
+    $State
+}
+
 function Test-TriTierRunState {
     [CmdletBinding()]
     param(
@@ -959,6 +1081,7 @@ Export-ModuleMember -Function @(
     "Set-TriTierRunStatus",
     "Set-TriTierRunFindingState",
     "Set-TriTierRunIntegratedState",
+    "Set-TriTierRunPhaseState",
     "Set-TriTierRunTaskFlowState",
     "Test-TriTierRunState",
     "Get-TriTierRunResumeData"
