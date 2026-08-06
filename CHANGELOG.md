@@ -72,3 +72,10 @@ All notable changes will be documented here.
 - Recalculated and persisted finding gates after every transition.
 - Preserved review cycles and complete finding history across run resumes.
 - Added integration coverage for fail, repair, pass, and deferral paths.
+
+### Finding lifecycle CLI
+
+- Added CLI commands to create, inspect, repair, review, and defer findings.
+- Added explicit owner-approval enforcement for CLI deferrals.
+- Added end-to-end JSON CLI coverage for persisted finding transitions.
+- Advanced the CLI version to `0.5.0-alpha`.

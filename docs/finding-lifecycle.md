@@ -33,3 +33,15 @@ the complete finding collection, refreshes `unresolvedFindings`, persists
 Fresh review must be performed by someone other than the repair actor.
 Deferral requires explicit owner approval, and CRITICAL findings cannot be
 deferred.
+
+## CLI commands
+
+- `finding-add` creates and persists a finding.
+- `finding-get` reads one persisted finding by ID.
+- `finding-repair` records a repair and recalculates the gate.
+- `finding-review` records an independent PASS or FAIL review.
+- `finding-defer` records an owner-approved deferral.
+
+All lifecycle commands support `-Json`. Finding titles use the existing
+`-Title` parameter. Owner deferral requires both `-OwnerApprovalRecord` and
+the explicit `-OwnerApproved` switch.
