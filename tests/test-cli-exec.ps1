@@ -241,6 +241,22 @@ try {
         -Name 'exec dry-run assigns Luna' `
         -Expected 'luna' `
         -Actual $DryRun.Json.responsibleParty
+    Assert-Equal `
+        -Name 'exec dry-run selects Luna worker profile' `
+        -Expected 'luna_worker' `
+        -Actual $DryRun.Json.profileName
+    Assert-Equal `
+        -Name 'exec dry-run handoff targets agent' `
+        -Expected 'agent' `
+        -Actual $DryRun.Json.handoffTargetType
+    Assert-Equal `
+        -Name 'exec dry-run handoff originates from Terra manager' `
+        -Expected 'terra_manager' `
+        -Actual $DryRun.Json.handoffFromProfile
+    Assert-Equal `
+        -Name 'exec dry-run handoff names Luna worker' `
+        -Expected 'luna_worker' `
+        -Actual $DryRun.Json.handoffToProfile
 
     $CompleteRunId = 'cli-exec-complete'
     New-TestRun -Root $TestRoot -RunId $CompleteRunId
@@ -322,7 +338,7 @@ try {
 
     Assert-Equal `
         -Name 'CLI version advanced' `
-        -Expected 'tri-tier-agent-system 0.8.0-alpha' `
+        -Expected 'tri-tier-agent-system 0.9.0-alpha' `
         -Actual $Version.Text.Trim()
 
     Write-Host ''

@@ -32,6 +32,8 @@ $RequiredPaths = @(
     "docs\cli-phase.md",
     "docs\execution-loop.md",
     "docs\cli-exec.md",
+    "docs\agent-roles.md",
+    "docs\handoff-contract.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "src\TriTier\Classification.psm1",
@@ -45,6 +47,7 @@ $RequiredPaths = @(
     "src\TriTier\Orchestration.psm1",
     "src\TriTier\PhaseGate.psm1",
     "src\TriTier\ExecutionLoop.psm1",
+    "src\TriTier\AgentProfiles.psm1",
     "agents\luna-router.toml",
     "agents\luna-worker.toml",
     "agents\sol-adjudicator.toml",
@@ -68,7 +71,9 @@ $RequiredPaths = @(
     "tests\test-phase-gate.ps1",
     "tests\test-cli-phase.ps1",
     "tests\test-execution-loop.ps1",
-    "tests\test-cli-exec.ps1"
+    "tests\test-cli-exec.ps1",
+    "tests\test-agent-profiles.ps1",
+    "tests\test-agent-handoffs.ps1"
 )
 
 $Failures = @()
@@ -152,7 +157,9 @@ $TestScripts = @(
     "tests\test-phase-gate.ps1",
     "tests\test-cli-phase.ps1",
     "tests\test-execution-loop.ps1",
-    "tests\test-cli-exec.ps1"
+    "tests\test-cli-exec.ps1",
+    "tests\test-agent-profiles.ps1",
+    "tests\test-agent-handoffs.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

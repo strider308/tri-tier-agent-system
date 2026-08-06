@@ -135,3 +135,13 @@ All notable changes will be documented here.
 - Added exec, exec-resume, and exec-status CLI commands plus dry-run envelope preview.
 - Added execution-loop and CLI tests covering completion, owner gates, external waits, stalls, recovery, and invalid results.
 - Advanced the CLI version to `0.8.0-alpha`.
+
+### Agent role and handoff integration
+
+- Bound all six agent profiles to explicit durable-stage authority and read/write limits.
+- Added deterministic stage-to-profile routing for Terra, Luna, Sol, owner, waits, and stops.
+- Added structured handoffs with bounded instructions, acceptance criteria, risk, evidence, findings, and independence metadata.
+- Added fail-closed authority validation so implementation profiles cannot satisfy their own independent review.
+- Added profile and handoff data to execution dispatcher envelopes using schema version 2.
+- Added profile, handoff, and execution-envelope behavioural tests plus documentation.
+- Advanced the CLI version to `0.9.0-alpha`.

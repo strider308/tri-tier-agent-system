@@ -152,6 +152,7 @@ $ModulePaths = @{
     RepairCycle = Join-Path $PSScriptRoot "TriTier\RepairCycle.psm1"
     Orchestration = Join-Path $PSScriptRoot "TriTier\Orchestration.psm1"
     PhaseGate = Join-Path $PSScriptRoot "TriTier\PhaseGate.psm1"
+    AgentProfiles = Join-Path $PSScriptRoot "TriTier\AgentProfiles.psm1"
     ExecutionLoop = Join-Path $PSScriptRoot "TriTier\ExecutionLoop.psm1"
     State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
@@ -555,6 +556,15 @@ function New-TriTierCliExecutionResult {
         -InputObject $ExecutionResult `
         -Name 'envelope' `
         -DefaultValue $null
+    $Handoff = if ($null -eq $Envelope) {
+        $null
+    }
+    else {
+        Get-TriTierCliObjectProperty `
+            -InputObject $Envelope `
+            -Name 'handoff' `
+            -DefaultValue $null
+    }
 
     [PSCustomObject][ordered]@{
         runId = [string](
@@ -643,6 +653,50 @@ function New-TriTierCliExecutionResult {
                 Get-TriTierCliObjectProperty `
                     -InputObject $Envelope `
                     -Name 'actionKey' `
+                    -DefaultValue ''
+            )
+        }
+        profileName = if ($null -eq $Envelope) {
+            ''
+        }
+        else {
+            [string](
+                Get-TriTierCliObjectProperty `
+                    -InputObject $Envelope `
+                    -Name 'profileName' `
+                    -DefaultValue ''
+            )
+        }
+        handoffTargetType = if ($null -eq $Handoff) {
+            ''
+        }
+        else {
+            [string](
+                Get-TriTierCliObjectProperty `
+                    -InputObject $Handoff `
+                    -Name 'targetType' `
+                    -DefaultValue ''
+            )
+        }
+        handoffFromProfile = if ($null -eq $Handoff) {
+            ''
+        }
+        else {
+            [string](
+                Get-TriTierCliObjectProperty `
+                    -InputObject $Handoff `
+                    -Name 'fromProfile' `
+                    -DefaultValue ''
+            )
+        }
+        handoffToProfile = if ($null -eq $Handoff) {
+            ''
+        }
+        else {
+            [string](
+                Get-TriTierCliObjectProperty `
+                    -InputObject $Handoff `
+                    -Name 'toProfile' `
                     -DefaultValue ''
             )
         }
@@ -2065,7 +2119,7 @@ switch ($Command) {
     }
 
     "version" {
-        "tri-tier-agent-system 0.8.0-alpha"
+        "tri-tier-agent-system 0.9.0-alpha"
         break
     }
 }

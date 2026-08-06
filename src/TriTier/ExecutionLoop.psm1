@@ -3,10 +3,12 @@ $ErrorActionPreference = 'Stop'
 
 $StateModulePath = Join-Path $PSScriptRoot 'State.psm1'
 $OrchestrationModulePath = Join-Path $PSScriptRoot 'Orchestration.psm1'
+$AgentProfilesModulePath = Join-Path $PSScriptRoot 'AgentProfiles.psm1'
 
 foreach ($RequiredModulePath in @(
     $StateModulePath
     $OrchestrationModulePath
+    $AgentProfilesModulePath
 )) {
     if (-not (Test-Path -LiteralPath $RequiredModulePath -PathType Leaf)) {
         throw "Required Tri-Tier module is missing: $RequiredModulePath"
@@ -15,6 +17,7 @@ foreach ($RequiredModulePath in @(
 
 $StateModule = Import-Module $StateModulePath -PassThru
 $OrchestrationModule = Import-Module $OrchestrationModulePath -PassThru
+$AgentProfilesModule = Import-Module $AgentProfilesModulePath -PassThru
 
 foreach ($RequiredCommand in @(
     @{
@@ -24,6 +27,14 @@ foreach ($RequiredCommand in @(
     @{
         Module = $StateModule
         Name = 'New-TriTierCheckpoint'
+    }
+    @{
+        Module = $AgentProfilesModule
+        Name = 'Resolve-TriTierAgentProfile'
+    }
+    @{
+        Module = $AgentProfilesModule
+        Name = 'New-TriTierAgentHandoff'
     }
     @{
         Module = $OrchestrationModule
@@ -45,7 +56,7 @@ foreach ($RequiredCommand in @(
     }
 }
 $script:ExecutionLoopSchemaVersion = 1
-$script:ExecutionEnvelopeSchemaVersion = 1
+$script:ExecutionEnvelopeSchemaVersion = 2
 $script:ExecutionResultSchemaVersion = 1
 $script:AllowedExecutionStatuses = @(
     'IDLE'
@@ -1141,6 +1152,17 @@ function New-TriTierExecutionEnvelope {
         [string]$ResultPath
     )
 
+    $ResolvedProfile = Resolve-TriTierAgentProfile -Decision $Decision
+    $Handoff = New-TriTierAgentHandoff `
+        -RunState $RunState `
+        -Decision $Decision
+    $ResolvedProfileName = if ($null -eq $ResolvedProfile) {
+        ''
+    }
+    else {
+        [string]$ResolvedProfile.name
+    }
+
     [PSCustomObject][ordered]@{
         schemaVersion = $script:ExecutionEnvelopeSchemaVersion
         actionKey = $ActionKey
@@ -1148,6 +1170,9 @@ function New-TriTierExecutionEnvelope {
         step = [int]$LoopState.currentStep + 1
         projectPath = [System.IO.Path]::GetFullPath($ProjectPath)
         runId = $RunId
+        profileName = $ResolvedProfileName
+        profile = $ResolvedProfile
+        handoff = $Handoff
         runStatePath = Get-TriTierExecutionRunStatePath `
             -ProjectPath $ProjectPath `
             -RunId $RunId

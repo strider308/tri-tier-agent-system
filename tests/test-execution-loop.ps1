@@ -359,6 +359,25 @@ try {
         -Name 'Dry run routes implementation to Luna' `
         -Expected 'luna' `
         -Actual $DryRunResult.decision.responsibleParty
+    Assert-Equal `
+        -Name 'Dry run uses execution envelope schema two' `
+        -Expected 2 `
+        -Actual $DryRunResult.envelope.schemaVersion
+    Assert-Equal `
+        -Name 'Dry run resolves Luna worker profile' `
+        -Expected 'luna_worker' `
+        -Actual $DryRunResult.envelope.profileName
+    Assert-Equal `
+        -Name 'Dry run handoff targets Luna worker' `
+        -Expected 'luna_worker' `
+        -Actual $DryRunResult.envelope.handoff.toProfile
+    Assert-Equal `
+        -Name 'Dry run handoff retains IMPLEMENT stage' `
+        -Expected 'IMPLEMENT' `
+        -Actual $DryRunResult.envelope.handoff.stage
+    Assert-True `
+        -Name 'Dry run handoff includes acceptance criteria' `
+        -Value (@($DryRunResult.envelope.handoff.acceptanceCriteria).Count -gt 0)
 
     $DryRunStatePath = Join-Path (
         Get-TestRunDirectory -Root $TestRoot -RunId $DryRunId
