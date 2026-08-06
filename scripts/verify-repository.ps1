@@ -18,11 +18,13 @@ $RequiredPaths = @(
     "docs\architecture.md",
     "docs\risk-model.md",
     "docs\evidence-model.md",
+    "docs\state-model.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "src\TriTier\Classification.psm1",
     "src\TriTier\Risk.psm1",
     "src\TriTier\Evidence.psm1",
+    "src\TriTier\State.psm1",
     "agents\luna-router.toml",
     "agents\luna-worker.toml",
     "agents\sol-adjudicator.toml",
@@ -31,7 +33,8 @@ $RequiredPaths = @(
     "agents\terra-reviewer.toml",
     "tests\test-classification.ps1",
     "tests\test-risk.ps1",
-    "tests\test-evidence.ps1"
+    "tests\test-evidence.ps1",
+    "tests\test-state.ps1"
 )
 
 $Failures = @()
@@ -100,7 +103,8 @@ else {
 $TestScripts = @(
     "tests\test-classification.ps1",
     "tests\test-risk.ps1",
-    "tests\test-evidence.ps1"
+    "tests\test-evidence.ps1",
+    "tests\test-state.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

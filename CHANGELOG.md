@@ -27,3 +27,11 @@ All notable changes will be documented here.
 - Added structured evidence records
 - Added independent reproduction enforcement for E5
 - Added evidence CLI and regression tests
+
+### Durable run state
+
+- Added local JSON run-state persistence
+- Added atomic state and exact next-action writes
+- Added resumable checkpoints
+- Added run-state integrity validation
+- Added explicit terminal run statuses
