@@ -236,6 +236,7 @@ function New-TriTierRun {
         unresolvedFindings  = @()
         findings            = @()
         findingGate         = $null
+        taskFlow            = $null
         blockers            = @()
         planPath            = $StoredPlanPath
         planHash            = $PlanHash
@@ -530,6 +531,83 @@ function Set-TriTierRunFindingState {
 
     $State
 }
+function Set-TriTierRunTaskFlowState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProjectPath,
+
+        [Parameter(Mandatory)]
+        [string]$RunId,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object]$TaskFlowState
+    )
+
+    foreach ($Property in @(
+        'schemaVersion',
+        'stage',
+        'previousStage',
+        'responsibleParty',
+        'mayAdvance',
+        'currentTask',
+        'implementationActor',
+        'reviewActor',
+        'reviewOutcome',
+        'nextAction',
+        'revision',
+        'transitionHistory'
+    )) {
+        if ($null -eq $TaskFlowState.PSObject.Properties[$Property]) {
+            throw "Task flow state is missing required property: $Property"
+        }
+    }
+
+    if ($TaskFlowState.stage -notin @(
+        'PLAN',
+        'IMPLEMENT',
+        'REVIEW',
+        'CONTINUE'
+    )) {
+        throw "Unsupported task flow stage: $($TaskFlowState.stage)"
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$TaskFlowState.nextAction)) {
+        throw 'Task flow state must provide a non-empty nextAction.'
+    }
+
+    $RunDirectory = Get-TriTierRunDirectory `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $State = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    if ($null -eq $State.PSObject.Properties['taskFlow']) {
+        $State |
+            Add-Member `
+                -NotePropertyName taskFlow `
+                -NotePropertyValue $null
+    }
+
+    $State.taskFlow = $TaskFlowState
+    $State.currentTask = [string]$TaskFlowState.currentTask
+    $State.nextAction = ([string]$TaskFlowState.nextAction).Trim()
+    $State.updatedUtc = [DateTime]::UtcNow.ToString('o')
+
+    Write-TriTierAtomicJson `
+        -Path (Join-Path $RunDirectory 'state\run-state.json') `
+        -InputObject $State
+
+    Write-TriTierAtomicText `
+        -Path (Join-Path $RunDirectory 'state\next-action.txt') `
+        -Content ($State.nextAction + "`n")
+
+    $State
+}
+
 function Test-TriTierRunState {
     [CmdletBinding()]
     param(
@@ -662,6 +740,7 @@ Export-ModuleMember -Function @(
     "New-TriTierCheckpoint",
     "Set-TriTierRunStatus",
     "Set-TriTierRunFindingState",
+    "Set-TriTierRunTaskFlowState",
     "Test-TriTierRunState",
     "Get-TriTierRunResumeData"
 )

@@ -79,3 +79,11 @@ All notable changes will be documented here.
 - Added explicit owner-approval enforcement for CLI deferrals.
 - Added end-to-end JSON CLI coverage for persisted finding transitions.
 - Advanced the CLI version to `0.5.0-alpha`.
+
+### Durable task-flow transition core
+
+- Added explicit PLAN, IMPLEMENT, REVIEW, and CONTINUE transitions.
+- Added Terra task selection, Luna implementation completion, and independent Sol review enforcement.
+- Added stable event IDs for idempotent transition replay.
+- Persisted transition history, actors, evidence IDs, review outcome, previous stage, and exact next action.
+- Kept failed reviews blocked until the finding-repair integration milestone authorizes continuation.
