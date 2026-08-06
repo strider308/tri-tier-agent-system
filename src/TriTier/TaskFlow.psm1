@@ -325,6 +325,13 @@ function Start-TriTierRunTask {
     $Flow.reviewOutcome = 'NOT_STARTED'
     $Flow.reviewSummary = ''
     $Flow.reviewEvidenceIds = @()
+    $Flow.activeRepairFindingId = ''
+    $Flow.lastRepairFindingId = ''
+    $Flow.repairResumeStage = ''
+    $Flow.repairActor = ''
+    $Flow.repairReviewActor = ''
+    $Flow.repairReviewOutcome = 'NOT_STARTED'
+    $Flow.adjudicationDecision = ''
     $Flow.nextAction = $NextAction
 
     $Flow = Add-TriTierTaskFlowTransition `
@@ -573,6 +580,13 @@ function Start-TriTierRunPlanning {
     $Flow.reviewOutcome = 'NOT_STARTED'
     $Flow.reviewSummary = ''
     $Flow.reviewEvidenceIds = @()
+    $Flow.activeRepairFindingId = ''
+    $Flow.lastRepairFindingId = ''
+    $Flow.repairResumeStage = ''
+    $Flow.repairActor = ''
+    $Flow.repairReviewActor = ''
+    $Flow.repairReviewOutcome = 'NOT_STARTED'
+    $Flow.adjudicationDecision = ''
     $Flow.nextAction = 'Terra must select and persist the next bounded task.'
 
     $Flow = Add-TriTierTaskFlowTransition `

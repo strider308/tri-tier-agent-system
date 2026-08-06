@@ -95,3 +95,12 @@ All notable changes will be documented here.
 - Prevented integrated repair stages from being persisted without the required finding status.
 - Added repair linkage and resume metadata to durable task flow.
 - Preserved final task REVIEW after a successful fresh repair review.
+
+### Persisted repair cycle
+
+- Added Terra-authorized repair-cycle creation after failed independent task review.
+- Added bounded Luna repair and independent Sol fresh-review transitions.
+- Added explicit REPAIR_AGAIN, OWNER_DECISION, ABORT_FOR_SAFETY, and FAIL_VALIDATION adjudication.
+- Added stable event replay protection across every repair-cycle mutation.
+- Returned accepted repairs to final task REVIEW instead of bypassing approval.
+- Added complete pass, failed-review, retry, owner-gate, terminal, restart, and exact-next-action tests.

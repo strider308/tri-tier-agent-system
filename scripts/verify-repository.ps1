@@ -25,6 +25,7 @@ $RequiredPaths = @(
     "docs\finding-lifecycle.md",
     "docs\task-flow.md",
     "docs\integrated-state.md",
+    "docs\repair-cycle.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "src\TriTier\Classification.psm1",
@@ -34,6 +35,7 @@ $RequiredPaths = @(
     "src\TriTier\Findings.psm1",
     "src\TriTier\FindingLifecycle.psm1",
     "src\TriTier\TaskFlow.psm1",
+    "src\TriTier\RepairCycle.psm1",
     "agents\luna-router.toml",
     "agents\luna-worker.toml",
     "agents\sol-adjudicator.toml",
@@ -50,7 +52,8 @@ $RequiredPaths = @(
     "tests\test-finding-lifecycle.ps1",
     "tests\test-cli-findings.ps1",
     "tests\test-task-flow.ps1",
-    "tests\test-integrated-state.ps1"
+    "tests\test-integrated-state.ps1",
+    "tests\test-repair-cycle.ps1"
 )
 
 $Failures = @()
@@ -127,7 +130,8 @@ $TestScripts = @(
     "tests\test-finding-lifecycle.ps1",
     "tests\test-cli-findings.ps1",
     "tests\test-task-flow.ps1",
-    "tests\test-integrated-state.ps1"
+    "tests\test-integrated-state.ps1",
+    "tests\test-repair-cycle.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {
