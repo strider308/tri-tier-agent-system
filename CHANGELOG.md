@@ -65,3 +65,10 @@ All notable changes will be documented here.
 - Synchronized gate-derived next actions with `next-action.txt`.
 - Added resume coverage for finding-controlled next actions.
 - Added repository verification for run/finding-state integration.
+
+### Persisted finding lifecycle
+
+- Added durable create, repair, fresh-review, and deferral transitions.
+- Recalculated and persisted finding gates after every transition.
+- Preserved review cycles and complete finding history across run resumes.
+- Added integration coverage for fail, repair, pass, and deferral paths.

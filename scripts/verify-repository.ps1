@@ -22,6 +22,7 @@ $RequiredPaths = @(
     "docs\evidence-model.md",
     "docs\state-model.md",
     "docs\finding-model.md",
+    "docs\finding-lifecycle.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "src\TriTier\Classification.psm1",
@@ -29,6 +30,7 @@ $RequiredPaths = @(
     "src\TriTier\Evidence.psm1",
     "src\TriTier\State.psm1",
     "src\TriTier\Findings.psm1",
+    "src\TriTier\FindingLifecycle.psm1",
     "agents\luna-router.toml",
     "agents\luna-worker.toml",
     "agents\sol-adjudicator.toml",
@@ -41,7 +43,8 @@ $RequiredPaths = @(
     "tests\test-state.ps1",
     "tests\test-cli-state.ps1",
     "tests\test-findings.ps1",
-    "tests\test-run-finding-state.ps1"
+    "tests\test-run-finding-state.ps1",
+    "tests\test-finding-lifecycle.ps1"
 )
 
 $Failures = @()
@@ -114,7 +117,8 @@ $TestScripts = @(
     "tests\test-state.ps1",
     "tests\test-cli-state.ps1",
     "tests\test-findings.ps1",
-    "tests\test-run-finding-state.ps1"
+    "tests\test-run-finding-state.ps1",
+    "tests\test-finding-lifecycle.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {
