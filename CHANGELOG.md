@@ -104,3 +104,12 @@ All notable changes will be documented here.
 - Added stable event replay protection across every repair-cycle mutation.
 - Returned accepted repairs to final task REVIEW instead of bypassing approval.
 - Added complete pass, failed-review, retry, owner-gate, terminal, restart, and exact-next-action tests.
+
+### Task-flow and repair-cycle CLI
+
+- Added six task-flow CLI commands and five repair-cycle CLI commands.
+- Added normalized JSON output with stage, role, gate, finding, replay, status, and exact next action.
+- Required explicit actors and stable event IDs for every mutating flow command.
+- Added child-process end-to-end coverage for pass, retry, owner-gate, role rejection, and idempotent replay paths.
+- Added TaskFlow and RepairCycle modules to CLI doctor.
+- Advanced the CLI version to `0.6.0-alpha`.

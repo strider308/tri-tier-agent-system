@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "doctor", "version")]
+    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "doctor", "version")]
     [string]$Command = "doctor",
 
     [Parameter()]
@@ -95,6 +95,17 @@ param(
 
     [Parameter()]
     [switch]$OwnerApproved,
+    [Parameter()]
+    [string]$Actor = "",
+
+    [Parameter()]
+    [string]$Instruction = "",
+
+    [Parameter()]
+    [string]$EventId = "",
+
+    [Parameter()]
+    [string]$Decision = "",
 [Parameter()]
     [switch]$Json
 )
@@ -108,6 +119,8 @@ $ModulePaths = @{
     Evidence = Join-Path $PSScriptRoot "TriTier\Evidence.psm1"
     Findings = Join-Path $PSScriptRoot "TriTier\Findings.psm1"
     FindingLifecycle = Join-Path $PSScriptRoot "TriTier\FindingLifecycle.psm1"
+    TaskFlow = Join-Path $PSScriptRoot "TriTier\TaskFlow.psm1"
+    RepairCycle = Join-Path $PSScriptRoot "TriTier\RepairCycle.psm1"
     State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
 
@@ -117,6 +130,78 @@ foreach ($Entry in $ModulePaths.GetEnumerator()) {
     }
 
     Import-Module $Entry.Value -Force
+}
+
+function New-TriTierCliFlowResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Flow,
+
+        [Parameter(Mandatory)]
+        [object]$State,
+
+        [Parameter()]
+        [object]$Finding = $null,
+
+        [Parameter()]
+        [object]$Gate = $null,
+
+        [Parameter()]
+        [bool]$Replayed = $false
+    )
+
+    $FindingId = ''
+    $FindingStatus = ''
+    $ReviewCycle = 0
+
+    if ($null -ne $Finding) {
+        $FindingId = [string]$Finding.findingId
+        $FindingStatus = [string]$Finding.status
+        $ReviewCycle = [int]$Finding.reviewCycle
+    }
+
+    $TaskBlocked = $false
+    $PhaseBlocked = $false
+    $RunBlocked = $false
+    $BlockedScope = 'NONE'
+
+    if ($null -ne $Gate) {
+        $TaskBlocked = [bool]$Gate.taskBlocked
+        $PhaseBlocked = [bool]$Gate.phaseBlocked
+        $RunBlocked = [bool]$Gate.runBlocked
+
+        if ($TaskBlocked) {
+            $BlockedScope = 'TASK'
+        }
+
+        if ($PhaseBlocked) {
+            $BlockedScope = 'PHASE'
+        }
+
+        if ($RunBlocked) {
+            $BlockedScope = 'RUN'
+        }
+    }
+
+    [PSCustomObject][ordered]@{
+        runId = [string]$State.runId
+        status = [string]$State.status
+        stage = [string]$Flow.stage
+        responsibleParty = [string]$Flow.responsibleParty
+        mayAdvance = [bool]$Flow.mayAdvance
+        currentTask = [string]$Flow.currentTask
+        blockedScope = $BlockedScope
+        taskBlocked = $TaskBlocked
+        phaseBlocked = $PhaseBlocked
+        runBlocked = $RunBlocked
+        findingId = $FindingId
+        findingStatus = $FindingStatus
+        reviewCycle = $ReviewCycle
+        replayed = $Replayed
+        nextAction = [string]$State.nextAction
+        updatedUtc = [string]$State.updatedUtc
+    }
 }
 
 switch ($Command) {
@@ -614,6 +699,450 @@ switch ($Command) {
 
         break
     }
+"task-flow-init" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The task-flow-init command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $TaskResult = Initialize-TriTierRunTaskFlow `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId `
+        -InitializedBy $Actor `
+        -EventId $EventId
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $TaskResult.flow `
+        -State $TaskResult.state `
+        -Replayed ([bool]$TaskResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"task-start" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "TaskId"; Value = $TaskId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The task-start command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        TaskId = $TaskId
+        SelectedBy = $Actor
+        EventId = $EventId
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Instruction)) {
+        $Arguments.ImplementationInstruction = $Instruction
+    }
+
+    $TaskResult = Start-TriTierRunTask @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $TaskResult.flow `
+        -State $TaskResult.state `
+        -Replayed ([bool]$TaskResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"implementation-complete" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The implementation-complete command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        ImplementedBy = $Actor
+        Summary = $Summary
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $TaskResult = Complete-TriTierRunImplementation @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $TaskResult.flow `
+        -State $TaskResult.state `
+        -Replayed ([bool]$TaskResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"task-review" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "Outcome"; Value = $Outcome },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The task-review command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($Outcome -notin @("PASS", "FAIL")) {
+        throw "The task-review command requires -Outcome PASS or FAIL."
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Reviewer = $Actor
+        Outcome = $Outcome
+        Summary = $Summary
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $TaskResult = Submit-TriTierRunTaskReview @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $TaskResult.flow `
+        -State $TaskResult.state `
+        -Replayed ([bool]$TaskResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"task-flow-status" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The task-flow-status command requires -RunId."
+    }
+
+    $Flow = Get-TriTierRunTaskFlow `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $State = Get-TriTierRunState `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $Flow `
+        -State $State `
+        -Gate $State.findingGate
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"task-planning-start" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The task-planning-start command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $TaskResult = Start-TriTierRunPlanning `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId `
+        -StartedBy $Actor `
+        -EventId $EventId
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $TaskResult.flow `
+        -State $TaskResult.state `
+        -Replayed ([bool]$TaskResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"repair-open" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "Severity"; Value = $Severity },
+        @{ Name = "Title"; Value = $Title },
+        @{ Name = "Description"; Value = $Description },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The repair-open command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($Severity -notin @("MEDIUM", "HIGH", "CRITICAL")) {
+        throw "The repair-open command requires -Severity MEDIUM, HIGH, or CRITICAL."
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Severity = $Severity
+        Title = $Title
+        Description = $Description
+        AuthorizedBy = $Actor
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $RepairResult = Start-TriTierRunRepairCycle @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $RepairResult.flow `
+        -State $RepairResult.state `
+        -Finding $RepairResult.finding `
+        -Gate $RepairResult.gate `
+        -Replayed ([bool]$RepairResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"repair-complete" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The repair-complete command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        RepairedBy = $Actor
+        RepairSummary = $Summary
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $RepairResult = Complete-TriTierRunRepair @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $RepairResult.flow `
+        -State $RepairResult.state `
+        -Finding $RepairResult.finding `
+        -Gate $RepairResult.gate `
+        -Replayed ([bool]$RepairResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"repair-review" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "Outcome"; Value = $Outcome },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The repair-review command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($Outcome -notin @("PASS", "FAIL")) {
+        throw "The repair-review command requires -Outcome PASS or FAIL."
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Reviewer = $Actor
+        Outcome = $Outcome
+        Summary = $Summary
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $RepairResult = Submit-TriTierRunRepairReview @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $RepairResult.flow `
+        -State $RepairResult.state `
+        -Finding $RepairResult.finding `
+        -Gate $RepairResult.gate `
+        -Replayed ([bool]$RepairResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"repair-adjudicate" {
+    foreach ($RequiredValue in @(
+        @{ Name = "RunId"; Value = $RunId },
+        @{ Name = "Actor"; Value = $Actor },
+        @{ Name = "Decision"; Value = $Decision },
+        @{ Name = "Summary"; Value = $Summary },
+        @{ Name = "EventId"; Value = $EventId }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$RequiredValue.Value)) {
+            throw "The repair-adjudicate command requires -$($RequiredValue.Name)."
+        }
+    }
+
+    if ($Decision -notin @(
+        "REPAIR_AGAIN",
+        "OWNER_DECISION",
+        "ABORT_FOR_SAFETY",
+        "FAIL_VALIDATION"
+    )) {
+        throw "The repair-adjudicate command received an unsupported -Decision."
+    }
+
+    $Arguments = @{
+        ProjectPath = $ProjectPath
+        RunId = $RunId
+        Adjudicator = $Actor
+        Decision = $Decision
+        Summary = $Summary
+        EventId = $EventId
+    }
+
+    if ($null -ne $EvidenceIds) {
+        $Arguments.EvidenceIds = @($EvidenceIds)
+    }
+
+    $RepairResult = Submit-TriTierRunAdjudication @Arguments
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $RepairResult.flow `
+        -State $RepairResult.state `
+        -Finding $RepairResult.finding `
+        -Gate $RepairResult.gate `
+        -Replayed ([bool]$RepairResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
+"repair-status" {
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        throw "The repair-status command requires -RunId."
+    }
+
+    $RepairResult = Get-TriTierRunRepairCycle `
+        -ProjectPath $ProjectPath `
+        -RunId $RunId
+
+    $Result = New-TriTierCliFlowResult `
+        -Flow $RepairResult.flow `
+        -State $RepairResult.state `
+        -Finding $RepairResult.finding `
+        -Gate $RepairResult.gate `
+        -Replayed ([bool]$RepairResult.replayed)
+
+    if ($Json) {
+        $Result | ConvertTo-Json -Depth 30
+    }
+    else {
+        $Result | Format-List
+    }
+
+    break
+}
+
     "doctor" {
         $RequiredAgents = @(
             "luna-router.toml",
@@ -667,7 +1196,7 @@ switch ($Command) {
     }
 
     "version" {
-        "tri-tier-agent-system 0.5.0-alpha"
+        "tri-tier-agent-system 0.6.0-alpha"
         break
     }
 }

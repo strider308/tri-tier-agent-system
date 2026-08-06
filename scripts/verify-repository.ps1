@@ -26,6 +26,7 @@ $RequiredPaths = @(
     "docs\task-flow.md",
     "docs\integrated-state.md",
     "docs\repair-cycle.md",
+    "docs\cli-flow.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "src\TriTier\Classification.psm1",
@@ -53,7 +54,8 @@ $RequiredPaths = @(
     "tests\test-cli-findings.ps1",
     "tests\test-task-flow.ps1",
     "tests\test-integrated-state.ps1",
-    "tests\test-repair-cycle.ps1"
+    "tests\test-repair-cycle.ps1",
+    "tests\test-cli-flow.ps1"
 )
 
 $Failures = @()
@@ -131,7 +133,8 @@ $TestScripts = @(
     "tests\test-cli-findings.ps1",
     "tests\test-task-flow.ps1",
     "tests\test-integrated-state.ps1",
-    "tests\test-repair-cycle.ps1"
+    "tests\test-repair-cycle.ps1",
+    "tests\test-cli-flow.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {
