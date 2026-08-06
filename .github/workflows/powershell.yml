@@ -1,0 +1,20 @@
+name: PowerShell validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify repository
+        shell: pwsh
+        run: ./scripts/verify-repository.ps1

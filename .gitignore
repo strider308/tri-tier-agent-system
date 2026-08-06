@@ -1,0 +1,27 @@
+# Local audit and migration material
+_local-audit/
+
+# Runtime state
+.tri-tier/runs/
+.tri-tier/checkpoints/
+.codegraph/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+config.local.*
+*.secret
+*.secrets
+
+# Generated output
+*.log
+*.tmp
+coverage/
+test-results/
+
+# Editor and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
