@@ -10,7 +10,7 @@ Tri-Tier separates software work across three responsibilities:
 
 ## Status
 
-`0.3.0-alpha`
+`0.4.0-alpha`
 
 The current release contains canonical agent definitions, task routing,
 R0-R4 risk classification, and E0-E5 evidence enforcement. Persistent run
@@ -61,3 +61,38 @@ review all generated changes before merging or deployment.
 ## License
 
 Licensed under the Apache License, Version 2.0. See LICENSE and NOTICE.
+## Durable runs
+
+Initialize a run:
+
+    pwsh .\src\tri-agent.ps1 run-init `
+        -ProjectPath C:\path\to\project `
+        -RunId feature-audit `
+        -Title "Feature audit" `
+        -NextAction "Prepare TASK-001."
+
+Create a checkpoint:
+
+    pwsh .\src\tri-agent.ps1 run-checkpoint `
+        -ProjectPath C:\path\to\project `
+        -RunId feature-audit `
+        -Summary "TASK-001 implemented." `
+        -NextAction "Assign independent Sol review." `
+        -CurrentTask TASK-001
+
+Resume from persisted state:
+
+    pwsh .\src\tri-agent.ps1 run-resume `
+        -ProjectPath C:\path\to\project `
+        -RunId feature-audit
+
+Read or update run status:
+
+    pwsh .\src\tri-agent.ps1 run-status `
+        -ProjectPath C:\path\to\project `
+        -RunId feature-audit
+
+    pwsh .\src\tri-agent.ps1 run-status `
+        -ProjectPath C:\path\to\project `
+        -RunId feature-audit `
+        -RunStatus COMPLETE

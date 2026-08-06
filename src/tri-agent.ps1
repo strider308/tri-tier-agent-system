@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("classify", "evidence", "doctor", "version")]
+    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "doctor", "version")]
     [string]$Command = "doctor",
 
     [Parameter()]
@@ -18,6 +18,41 @@ param(
 
     [Parameter()]
     [switch]$IndependentlyReproduced,
+    [Parameter()]
+    [string]$ProjectPath = ".",
+
+    [Parameter()]
+    [string]$RunId = "",
+
+    [Parameter()]
+    [string]$Title = "",
+
+    [Parameter()]
+    [string]$PlanPath = "",
+
+    [Parameter()]
+    [string]$CurrentPhase = "PHASE-01",
+
+    [Parameter()]
+    [string]$CurrentTask = "",
+
+    [Parameter()]
+    [string]$NextAction = "",
+
+    [Parameter()]
+    [string]$Summary = "",
+
+    [Parameter()]
+    [string[]]$CompletedTasks,
+
+    [Parameter()]
+    [string[]]$UnresolvedFindings,
+
+    [Parameter()]
+    [string[]]$Blockers,
+
+    [Parameter()]
+    [string]$RunStatus = "",
 
     [Parameter()]
     [switch]$Json
@@ -30,6 +65,7 @@ $ModulePaths = @{
     Classification = Join-Path $PSScriptRoot "TriTier\Classification.psm1"
     Risk = Join-Path $PSScriptRoot "TriTier\Risk.psm1"
     Evidence = Join-Path $PSScriptRoot "TriTier\Evidence.psm1"
+    State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
 
 foreach ($Entry in $ModulePaths.GetEnumerator()) {
@@ -100,6 +136,195 @@ switch ($Command) {
         break
     }
 
+    "run-init" {
+        if ([string]::IsNullOrWhiteSpace($Title)) {
+            throw "The run-init command requires -Title."
+        }
+
+        $Arguments = @{
+            ProjectPath = $ProjectPath
+            Title = $Title
+            CurrentPhase = $CurrentPhase
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($RunId)) {
+            $Arguments.RunId = $RunId
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($PlanPath)) {
+            $Arguments.PlanPath = $PlanPath
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($CurrentTask)) {
+            $Arguments.CurrentTask = $CurrentTask
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($NextAction)) {
+            $Arguments.NextAction = $NextAction
+        }
+
+        $Run = New-TriTierRun @Arguments
+
+        $Result = [PSCustomObject]@{
+            runId = $Run.state.runId
+            title = $Run.state.title
+            status = $Run.state.status
+            runDirectory = $Run.runDirectory
+            currentPhase = $Run.state.currentPhase
+            currentTask = $Run.state.currentTask
+            nextAction = $Run.state.nextAction
+            baselineCommit = $Run.state.baselineCommit
+            workingTreeStatus = $Run.state.workingTreeStatus
+            planHash = $Run.state.planHash
+        }
+
+        if ($Json) {
+            $Result | ConvertTo-Json -Depth 10
+        }
+        else {
+            $Result | Format-List
+        }
+
+        break
+    }
+
+    "run-checkpoint" {
+        if ([string]::IsNullOrWhiteSpace($RunId)) {
+            throw "The run-checkpoint command requires -RunId."
+        }
+
+        if ([string]::IsNullOrWhiteSpace($Summary)) {
+            throw "The run-checkpoint command requires -Summary."
+        }
+
+        if ([string]::IsNullOrWhiteSpace($NextAction)) {
+            throw "The run-checkpoint command requires -NextAction."
+        }
+
+        $Arguments = @{
+            ProjectPath = $ProjectPath
+            RunId = $RunId
+            Summary = $Summary
+            NextAction = $NextAction
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($CurrentPhase)) {
+            $Arguments.CurrentPhase = $CurrentPhase
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($CurrentTask)) {
+            $Arguments.CurrentTask = $CurrentTask
+        }
+
+        if ($null -ne $CompletedTasks) {
+            $Arguments.CompletedTasks = $CompletedTasks
+        }
+
+        if ($null -ne $UnresolvedFindings) {
+            $Arguments.UnresolvedFindings = $UnresolvedFindings
+        }
+
+        if ($null -ne $Blockers) {
+            $Arguments.Blockers = $Blockers
+        }
+
+        $Checkpoint = New-TriTierCheckpoint @Arguments
+
+        $Result = [PSCustomObject]@{
+            checkpointId = $Checkpoint.checkpointId
+            runId = $Checkpoint.runId
+            createdUtc = $Checkpoint.createdUtc
+            summary = $Checkpoint.summary
+            currentPhase = $Checkpoint.state.currentPhase
+            currentTask = $Checkpoint.state.currentTask
+            nextAction = $Checkpoint.state.nextAction
+        }
+
+        if ($Json) {
+            $Result | ConvertTo-Json -Depth 10
+        }
+        else {
+            $Result | Format-List
+        }
+
+        break
+    }
+
+    "run-resume" {
+        if ([string]::IsNullOrWhiteSpace($RunId)) {
+            throw "The run-resume command requires -RunId."
+        }
+
+        $Resume = Get-TriTierRunResumeData `
+            -ProjectPath $ProjectPath `
+            -RunId $RunId
+
+        $Result = [PSCustomObject]@{
+            runId = $Resume.state.runId
+            title = $Resume.state.title
+            status = $Resume.state.status
+            currentPhase = $Resume.state.currentPhase
+            currentTask = $Resume.state.currentTask
+            completedTasks = @($Resume.state.completedTasks)
+            unresolvedFindings = @($Resume.state.unresolvedFindings)
+            blockers = @($Resume.state.blockers)
+            nextAction = $Resume.nextAction
+            lastCheckpointId = $Resume.state.lastCheckpointId
+            latestCheckpointSummary = if ($null -ne $Resume.latestCheckpoint) {
+                $Resume.latestCheckpoint.summary
+            }
+            else {
+                ""
+            }
+            runDirectory = $Resume.runDirectory
+        }
+
+        if ($Json) {
+            $Result | ConvertTo-Json -Depth 15
+        }
+        else {
+            $Result | Format-List
+        }
+
+        break
+    }
+
+    "run-status" {
+        if ([string]::IsNullOrWhiteSpace($RunId)) {
+            throw "The run-status command requires -RunId."
+        }
+
+        if ([string]::IsNullOrWhiteSpace($RunStatus)) {
+            $State = Get-TriTierRunState `
+                -ProjectPath $ProjectPath `
+                -RunId $RunId
+        }
+        else {
+            $State = Set-TriTierRunStatus `
+                -ProjectPath $ProjectPath `
+                -RunId $RunId `
+                -Status $RunStatus
+        }
+
+        $Result = [PSCustomObject]@{
+            runId = $State.runId
+            title = $State.title
+            status = $State.status
+            currentPhase = $State.currentPhase
+            currentTask = $State.currentTask
+            nextAction = $State.nextAction
+            updatedUtc = $State.updatedUtc
+        }
+
+        if ($Json) {
+            $Result | ConvertTo-Json -Depth 10
+        }
+        else {
+            $Result | Format-List
+        }
+
+        break
+    }
     "doctor" {
         $RequiredAgents = @(
             "luna-router.toml",
@@ -153,7 +378,7 @@ switch ($Command) {
     }
 
     "version" {
-        "tri-tier-agent-system 0.3.0-alpha"
+        "tri-tier-agent-system 0.4.0-alpha"
         break
     }
 }

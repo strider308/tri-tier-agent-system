@@ -35,3 +35,9 @@ unresolved findings, blockers, summary, and exact next action.
 - `ABORTED_FOR_SAFETY`
 
 Runtime state is local and must not be committed by default.
+## CLI commands
+
+- `run-init` creates a durable run.
+- `run-checkpoint` persists progress and the exact next action.
+- `run-resume` validates and reloads the latest run state.
+- `run-status` reads or updates the explicit run status.

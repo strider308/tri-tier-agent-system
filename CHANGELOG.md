@@ -35,3 +35,11 @@ All notable changes will be documented here.
 - Added resumable checkpoints
 - Added run-state integrity validation
 - Added explicit terminal run statuses
+
+### Run-state CLI
+
+- Added `run-init` for durable run creation
+- Added `run-checkpoint` for progress persistence
+- Added `run-resume` for exact next-action recovery
+- Added `run-status` for explicit status inspection and updates
+- Added end-to-end state CLI tests
