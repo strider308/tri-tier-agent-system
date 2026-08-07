@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "orchestration-status", "phase-start", "phase-ready", "phase-review", "phase-accept", "phase-reject", "phase-status", "exec", "exec-resume", "exec-status", "doctor", "version")]
+    [ValidateSet("classify", "evidence", "run-init", "run-checkpoint", "run-resume", "run-status", "finding-add", "finding-get", "finding-repair", "finding-review", "finding-defer", "task-flow-init", "task-start", "implementation-complete", "task-review", "task-flow-status", "task-planning-start", "repair-open", "repair-complete", "repair-review", "repair-adjudicate", "repair-status", "orchestration-status", "phase-start", "phase-ready", "phase-review", "phase-accept", "phase-reject", "phase-status", "exec", "exec-resume", "exec-status", "doctor", "version", "compatibility-check", "install-plan", "install-apply", "install-status", "uninstall-plan", "uninstall-apply", "migrate-plan", "migrate-apply", "install-recover")]
     [string]$Command = "doctor",
 
     [Parameter()]
@@ -135,6 +135,14 @@ param(
 
     [Parameter()]
     [switch]$DryRun,
+    [Parameter()]
+    [string]$InstallRoot = "",
+
+    [Parameter()]
+    [string]$ConfirmInstallRoot = "",
+
+    [Parameter()]
+    [string]$ConfirmInstallId = "",
 [Parameter()]
     [switch]$Json
 )
@@ -153,6 +161,7 @@ $ModulePaths = @{
     Orchestration = Join-Path $PSScriptRoot "TriTier\Orchestration.psm1"
     PhaseGate = Join-Path $PSScriptRoot "TriTier\PhaseGate.psm1"
     AgentProfiles = Join-Path $PSScriptRoot "TriTier\AgentProfiles.psm1"
+    Installation = Join-Path $PSScriptRoot "TriTier\Installation.psm1"
     ExecutionLoop = Join-Path $PSScriptRoot "TriTier\ExecutionLoop.psm1"
     State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
@@ -2066,6 +2075,255 @@ switch ($Command) {
     break
 }
 
+"compatibility-check" {
+    $InstallationSourceRoot = Split-Path -Parent $PSScriptRoot
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = Get-TriTierCompatibilityReport `
+        -SourceRoot $InstallationSourceRoot `
+        -TargetRoot $ResolvedInstallationRoot
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"install-plan" {
+    $InstallationSourceRoot = Split-Path -Parent $PSScriptRoot
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = New-TriTierInstallPlan `
+        -SourceRoot $InstallationSourceRoot `
+        -TargetRoot $ResolvedInstallationRoot
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"install-apply" {
+    if ([string]::IsNullOrWhiteSpace($ConfirmInstallRoot)) {
+        throw 'install-apply requires -ConfirmInstallRoot.'
+    }
+
+    $InstallationSourceRoot = Split-Path -Parent $PSScriptRoot
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+    $InstallationArguments = @{
+        SourceRoot = $InstallationSourceRoot
+        TargetRoot = $ResolvedInstallationRoot
+        ConfirmTarget = $ConfirmInstallRoot
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfirmInstallId)) {
+        $InstallationArguments.ConfirmInstallId = $ConfirmInstallId
+    }
+
+    $InstallationCommandResult = Invoke-TriTierInstall `
+        @InstallationArguments
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"install-status" {
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = Get-TriTierInstallStatus `
+        -TargetRoot $ResolvedInstallationRoot
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"uninstall-plan" {
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = New-TriTierUninstallPlan `
+        -TargetRoot $ResolvedInstallationRoot
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"uninstall-apply" {
+    if ([string]::IsNullOrWhiteSpace($ConfirmInstallRoot)) {
+        throw 'uninstall-apply requires -ConfirmInstallRoot.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ConfirmInstallId)) {
+        throw 'uninstall-apply requires -ConfirmInstallId.'
+    }
+
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = Invoke-TriTierUninstall `
+        -TargetRoot $ResolvedInstallationRoot `
+        -ConfirmTarget $ConfirmInstallRoot `
+        -ConfirmInstallId $ConfirmInstallId
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"migrate-plan" {
+    $InstallationSourceRoot = Split-Path -Parent $PSScriptRoot
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = New-TriTierMigrationPlan `
+        -SourceRoot $InstallationSourceRoot `
+        -TargetRoot $ResolvedInstallationRoot
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"migrate-apply" {
+    if ([string]::IsNullOrWhiteSpace($ConfirmInstallRoot)) {
+        throw 'migrate-apply requires -ConfirmInstallRoot.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ConfirmInstallId)) {
+        throw 'migrate-apply requires -ConfirmInstallId.'
+    }
+
+    $InstallationSourceRoot = Split-Path -Parent $PSScriptRoot
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = Invoke-TriTierMigration `
+        -SourceRoot $InstallationSourceRoot `
+        -TargetRoot $ResolvedInstallationRoot `
+        -ConfirmTarget $ConfirmInstallRoot `
+        -ConfirmInstallId $ConfirmInstallId
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
+"install-recover" {
+    $ResolvedInstallationRoot = if (
+        [string]::IsNullOrWhiteSpace($InstallRoot)
+    ) {
+        Get-TriTierDefaultInstallRoot
+    }
+    else {
+        $InstallRoot
+    }
+
+    $InstallationCommandResult = Repair-TriTierInstallation `
+        -TargetRoot $ResolvedInstallationRoot
+
+    if ($Json) {
+        $InstallationCommandResult | ConvertTo-Json -Depth 80
+    }
+    else {
+        $InstallationCommandResult | Format-List
+    }
+
+    break
+}
+
     "doctor" {
         $RequiredAgents = @(
             "luna-router.toml",
@@ -2119,7 +2377,7 @@ switch ($Command) {
     }
 
     "version" {
-        "tri-tier-agent-system 0.9.0-alpha"
+        "tri-tier-agent-system 0.10.0-alpha"
         break
     }
 }

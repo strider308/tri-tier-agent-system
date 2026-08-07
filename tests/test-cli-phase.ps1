@@ -341,7 +341,7 @@ try {
 
     Assert-Equal `
         -Name 'CLI version advanced' `
-        -Expected 'tri-tier-agent-system 0.9.0-alpha' `
+        -Expected 'tri-tier-agent-system 0.10.0-alpha' `
         -Actual (($VersionOutput -join '').Trim())
 
     Write-Host 'Orchestration and phase-gate CLI tests passed.' -ForegroundColor Green

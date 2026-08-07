@@ -34,8 +34,15 @@ $RequiredPaths = @(
     "docs\cli-exec.md",
     "docs\agent-roles.md",
     "docs\handoff-contract.md",
+    "docs\installation.md",
+    "docs\migration.md",
+    "docs\recovery.md",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
+    "scripts\install-isolated.ps1",
+    "scripts\uninstall-isolated.ps1",
+    "scripts\migrate-isolated.ps1",
+    "scripts\recover-installation.ps1",
     "src\TriTier\Classification.psm1",
     "src\TriTier\Risk.psm1",
     "src\TriTier\Evidence.psm1",
@@ -48,6 +55,7 @@ $RequiredPaths = @(
     "src\TriTier\PhaseGate.psm1",
     "src\TriTier\ExecutionLoop.psm1",
     "src\TriTier\AgentProfiles.psm1",
+    "src\TriTier\Installation.psm1",
     "agents\luna-router.toml",
     "agents\luna-worker.toml",
     "agents\sol-adjudicator.toml",
@@ -73,7 +81,9 @@ $RequiredPaths = @(
     "tests\test-execution-loop.ps1",
     "tests\test-cli-exec.ps1",
     "tests\test-agent-profiles.ps1",
-    "tests\test-agent-handoffs.ps1"
+    "tests\test-agent-handoffs.ps1",
+    "tests\test-installation.ps1",
+    "tests\test-cli-installation.ps1"
 )
 
 $Failures = @()
@@ -159,7 +169,9 @@ $TestScripts = @(
     "tests\test-execution-loop.ps1",
     "tests\test-cli-exec.ps1",
     "tests\test-agent-profiles.ps1",
-    "tests\test-agent-handoffs.ps1"
+    "tests\test-agent-handoffs.ps1",
+    "tests\test-installation.ps1",
+    "tests\test-cli-installation.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

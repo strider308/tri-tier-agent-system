@@ -145,3 +145,15 @@ All notable changes will be documented here.
 - Added profile and handoff data to execution dispatcher envelopes using schema version 2.
 - Added profile, handoff, and execution-envelope behavioural tests plus documentation.
 - Advanced the CLI version to `0.9.0-alpha`.
+
+### Isolated installation and recovery hardening
+
+- Added a transaction-safe isolated installer that never writes into the private Codex directory or changes PATH.
+- Added compatibility reporting, explicit target confirmation, manifest ownership, file hashing, and reparse-point protection.
+- Added reversible uninstall by quarantine instead of deletion.
+- Added schema-aware migration with stable installation identity and rollback backups.
+- Added deterministic recovery for interrupted staging, replacement, migration, and uninstall transactions.
+- Stabilized execution action identity so bookkeeping timestamps cannot bypass stall protection.
+- Added CLI commands and standalone scripts for planning, applying, inspecting, migrating, uninstalling, and recovering installations.
+- Added installation, migration, recovery, and CLI regression tests plus documentation.
+- Advanced the CLI version to `0.10.0-alpha`.

@@ -8,7 +8,7 @@ $ExecutionLoopPath = Join-Path $RepoRoot 'src\TriTier\ExecutionLoop.psm1'
 
 Import-Module $StatePath -Force
 Import-Module $TaskFlowPath -Force
-Import-Module $ExecutionLoopPath -Force
+$ExecutionLoopModule = Import-Module $ExecutionLoopPath -Force -PassThru
 
 function Assert-Equal {
     param(
@@ -100,6 +100,56 @@ Assert-True `
                 -ErrorAction SilentlyContinue
         )
     )
+
+$StableActionDecision = [PSCustomObject][ordered]@{
+    stage = 'IMPLEMENT'
+    responsibleParty = 'luna'
+    blockedScope = 'NONE'
+    findingId = ''
+    phaseId = ''
+    nextAction = 'Implement the stable action-key task.'
+}
+$StableActionStateOne = [PSCustomObject][ordered]@{
+    runId = 'action-key-stability'
+    status = 'ACTIVE'
+    currentTask = 'task-one'
+    updatedUtc = '2026-08-06T00:00:00.0000000Z'
+}
+$StableActionStateTwo = [PSCustomObject][ordered]@{
+    runId = 'action-key-stability'
+    status = 'ACTIVE'
+    currentTask = 'task-one'
+    updatedUtc = '2026-08-06T00:00:01.0000000Z'
+}
+$ChangedTaskActionState = [PSCustomObject][ordered]@{
+    runId = 'action-key-stability'
+    status = 'ACTIVE'
+    currentTask = 'task-two'
+    updatedUtc = '2026-08-06T00:00:01.0000000Z'
+}
+
+$StableActionKeyOne = & $ExecutionLoopModule {
+    param([object]$State, [object]$Decision)
+    Get-TriTierExecutionActionKey -RunState $State -Decision $Decision
+} $StableActionStateOne $StableActionDecision
+
+$StableActionKeyTwo = & $ExecutionLoopModule {
+    param([object]$State, [object]$Decision)
+    Get-TriTierExecutionActionKey -RunState $State -Decision $Decision
+} $StableActionStateTwo $StableActionDecision
+
+$ChangedTaskActionKey = & $ExecutionLoopModule {
+    param([object]$State, [object]$Decision)
+    Get-TriTierExecutionActionKey -RunState $State -Decision $Decision
+} $ChangedTaskActionState $StableActionDecision
+
+Assert-Equal `
+    -Name 'Bookkeeping timestamp does not change action key' `
+    -Expected $StableActionKeyOne `
+    -Actual $StableActionKeyTwo
+Assert-True `
+    -Name 'Current task changes action key' `
+    -Value ($StableActionKeyOne -ne $ChangedTaskActionKey)
 
 function Get-TestRunDirectory {
     param(

@@ -465,7 +465,7 @@ function Get-TriTierExecutionActionKey {
         [string](
             Get-TriTierExecutionProperty `
                 -InputObject $RunState `
-                -Name 'updatedUtc' `
+                -Name 'currentTask' `
                 -DefaultValue ''
         )
         [string](
