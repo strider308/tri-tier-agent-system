@@ -37,6 +37,14 @@ $RequiredPaths = @(
     "docs\installation.md",
     "docs\migration.md",
     "docs\recovery.md",
+    "docs\command-reference.md",
+    "docs\quickstart.md",
+    "docs\contributor-workflow.md",
+    "examples\README.md",
+    "examples\diagnostics.ps1",
+    "examples\classify-task.ps1",
+    "examples\plan-isolated-install.ps1",
+    "examples\dry-run-execution.ps1",
     "src\tri-agent.cmd",
     "src\tri-agent.ps1",
     "scripts\install-isolated.ps1",
@@ -83,7 +91,8 @@ $RequiredPaths = @(
     "tests\test-agent-profiles.ps1",
     "tests\test-agent-handoffs.ps1",
     "tests\test-installation.ps1",
-    "tests\test-cli-installation.ps1"
+    "tests\test-cli-installation.ps1",
+    "tests\test-public-docs.ps1"
 )
 
 $Failures = @()
@@ -171,7 +180,8 @@ $TestScripts = @(
     "tests\test-agent-profiles.ps1",
     "tests\test-agent-handoffs.ps1",
     "tests\test-installation.ps1",
-    "tests\test-cli-installation.ps1"
+    "tests\test-cli-installation.ps1",
+    "tests\test-public-docs.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

@@ -96,3 +96,14 @@ Read or update run status:
         -ProjectPath C:\path\to\project `
         -RunId feature-audit `
         -RunStatus COMPLETE
+
+<!-- BEGIN TRI-TIER PUBLIC DOCS -->
+## Public documentation
+
+- [Quickstart](docs/quickstart.md)
+- [Command reference](docs/command-reference.md)
+- [Runnable examples](examples/README.md)
+- [Contributor workflow](docs/contributor-workflow.md)
+
+The public command reference is mechanically checked against the live CLI command cases.
+<!-- END TRI-TIER PUBLIC DOCS -->

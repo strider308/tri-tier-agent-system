@@ -15,3 +15,11 @@ Contributions are welcome.
 ```powershell
 pwsh .\scripts\verify-repository.ps1
 ```
+
+<!-- BEGIN TRI-TIER CONTRIBUTOR WORKFLOW -->
+## Contributor workflow
+
+Use [docs/contributor-workflow.md](docs/contributor-workflow.md) as the public development checklist.
+
+Documentation coverage is validated with `tests/test-public-docs.ps1` and the full repository verifier.
+<!-- END TRI-TIER CONTRIBUTOR WORKFLOW -->

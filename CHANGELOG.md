@@ -157,3 +157,12 @@ All notable changes will be documented here.
 - Added CLI commands and standalone scripts for planning, applying, inspecting, migrating, uninstalling, and recovering installations.
 - Added installation, migration, recovery, and CLI regression tests plus documentation.
 - Advanced the CLI version to `0.10.0-alpha`.
+
+### Public documentation and examples
+
+- Added a command reference that is generated from and tested against the exact public CLI command surface.
+- Added a quickstart covering diagnostics, classification, isolated installation planning, durable state, and execution dry-run.
+- Added four parser-validated runnable examples that avoid mutating installation commands.
+- Added a contributor workflow covering authority boundaries, PowerShell discipline, targeted tests, full verification, and publication hygiene.
+- Added documentation link, command coverage, parameter inventory, and example safety regressions.
+- Kept the CLI version at `0.10.0-alpha`; Phase 7 changes public documentation and contributor experience only.
