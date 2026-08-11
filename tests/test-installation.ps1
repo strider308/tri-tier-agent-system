@@ -345,7 +345,12 @@ try {
         -Expected 2 `
         -Actual ([int]$MigratedStatus.schemaVersion)
 
-    $RecoveryBackup = Join-Path $TestRoot 'recovery-backup'
+    $RecoveryOperationId = [guid]::NewGuid().ToString('N')
+    $RecoveryBackupRoot = Join-Path $TestRoot '.tri-tier-backups'
+    $RecoveryBackup = Join-Path $RecoveryBackupRoot (
+        'isolated-recovery-' + $RecoveryOperationId
+    )
+    New-Item -ItemType Directory -Path $RecoveryBackupRoot -Force | Out-Null
     Move-Item `
         -LiteralPath $InstallTarget `
         -Destination $RecoveryBackup
@@ -354,11 +359,12 @@ try {
         -TargetRoot $InstallTarget
     $RecoveryJournal = [ordered]@{
         product = 'tri-tier-agent-system'
-        operationId = [guid]::NewGuid().ToString('N')
+        journalSchemaVersion = 1
+        operationId = $RecoveryOperationId
         operation = 'UPGRADE'
         state = 'BACKED_UP'
         targetRoot = $InstallTarget
-        stageRoot = (Join-Path $TestRoot 'missing-stage')
+        stageRoot = (Join-Path $TestRoot ".tri-tier-stage-$RecoveryOperationId")
         backupPath = $RecoveryBackup
         installId = [string]$MigratedStatus.installId
         startedUtc = (Get-Date).ToUniversalTime().ToString('o')

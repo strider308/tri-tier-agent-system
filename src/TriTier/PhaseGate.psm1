@@ -19,7 +19,7 @@ foreach ($ModulePath in @(
 
 Import-Module $StateModulePath
 Import-Module $FindingsModulePath
-$EvidenceModule = Import-Module $EvidenceModulePath -Force -PassThru
+$EvidenceModule = Import-Module $EvidenceModulePath -PassThru
 Import-Module $OrchestrationModulePath
 
 function Copy-TriTierPhaseObject {

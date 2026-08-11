@@ -111,6 +111,138 @@ function Get-TriTierInstallFullPath {
     )
 }
 
+function Test-TriTierInstallPathBoundary {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$AuthorizedRoot,
+
+        [Parameter()]
+        [string]$BasePath = '',
+
+        [Parameter()]
+        [bool]$AllowExactRoot = $true
+    )
+
+    $Reasons = [System.Collections.Generic.List[string]]::new()
+    $ResolvedPath = ''
+    $ResolvedRoot = ''
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $Reasons.Add('Path is empty.')
+    }
+    elseif (
+        $Path.StartsWith('\\?\') -or
+        $Path.StartsWith('\\.\') -or
+        $Path.StartsWith('\??\')
+    ) {
+        $Reasons.Add('Device and extended path namespaces are unsupported.')
+    }
+    elseif (
+        $Path -match '::' -or
+        (
+            $Path -match ':' -and
+            $Path -notmatch '^[A-Za-z]:'
+        )
+    ) {
+        $Reasons.Add('Alternate provider path syntax is unsupported.')
+    }
+    elseif ($Path.StartsWith('\\')) {
+        $Reasons.Add('UNC paths are unsupported by the isolated installation model.')
+    }
+
+    try {
+        if ($Reasons.Count -eq 0) {
+            $ExpandedPath = [Environment]::ExpandEnvironmentVariables($Path)
+            $PathWithBase = if (
+                [System.IO.Path]::IsPathRooted($ExpandedPath)
+            ) {
+                $ExpandedPath
+            }
+            else {
+                if ([string]::IsNullOrWhiteSpace($BasePath)) {
+                    throw 'Relative path has no authorized base.'
+                }
+
+                Join-Path $BasePath $ExpandedPath
+            }
+
+            $ResolvedPath = (Get-TriTierInstallFullPath -Path $PathWithBase).Replace('/', '\')
+            $ResolvedRoot = (Get-TriTierInstallFullPath -Path $AuthorizedRoot).Replace('/', '\')
+        }
+    }
+    catch {
+        $Reasons.Add('Path cannot be canonically resolved.')
+    }
+
+    if ($Reasons.Count -eq 0) {
+        $InsideRoot = (
+            [string]::Equals(
+                $ResolvedPath,
+                $ResolvedRoot,
+                [System.StringComparison]::OrdinalIgnoreCase
+            ) -and $AllowExactRoot
+        ) -or $ResolvedPath.StartsWith(
+            $ResolvedRoot.TrimEnd('\', '/') + '\',
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+
+        if (-not $InsideRoot) {
+            $Reasons.Add('Path is outside the authorized installation boundary.')
+        }
+    }
+
+    if ($Reasons.Count -eq 0) {
+        $Current = $ResolvedPath
+
+        while (-not [string]::IsNullOrWhiteSpace($Current)) {
+            if (Test-Path -LiteralPath $Current) {
+                $Item = Get-Item -LiteralPath $Current -Force
+
+                if (
+                    ($Item.Attributes -band
+                        [System.IO.FileAttributes]::ReparsePoint) -ne 0
+                ) {
+                    $Reasons.Add(
+                        "Path crosses a reparse point: $Current"
+                    )
+                    break
+                }
+            }
+
+            if (
+                [string]::Equals(
+                    $Current,
+                    $ResolvedRoot,
+                    [System.StringComparison]::OrdinalIgnoreCase
+                )
+            ) {
+                break
+            }
+
+            $Next = Split-Path -Parent $Current
+
+            if ($Next -eq $Current) {
+                break
+            }
+
+            $Current = $Next
+        }
+    }
+
+    [PSCustomObject][ordered]@{
+        valid = ($Reasons.Count -eq 0)
+        path = $ResolvedPath
+        authorizedRoot = $ResolvedRoot
+        reasons = @($Reasons)
+    }
+}
+
 function Test-TriTierInstallPathWithin {
     [CmdletBinding()]
     param(
@@ -596,6 +728,21 @@ function Get-TriTierInstallSourceFiles {
     @($Files)
 }
 
+function Get-TriTierInstallRequiredRelativePaths {
+    [CmdletBinding()]
+    param()
+
+    @(
+        'src\tri-agent.ps1'
+        'src\tri-agent.cmd'
+        'src\TriTier\AgentProfiles.psm1'
+        'src\TriTier\ExecutionLoop.psm1'
+        'agents\luna-worker.toml'
+        'agents\terra-manager.toml'
+        'agents\sol-architect.toml'
+    )
+}
+
 function Test-TriTierInstallPowerShellFile {
     [CmdletBinding()]
     param(
@@ -835,6 +982,12 @@ function New-TriTierInstallPlan {
     else {
         'UNMANAGED'
     }
+    $ExistingStatus = if ($ExistingState -eq 'OWNED') {
+        Get-TriTierInstallStatus -TargetRoot $ResolvedTarget
+    }
+    else {
+        $null
+    }
     $SourceFiles = @(
         Get-TriTierInstallSourceFiles -SourceRoot $ResolvedSource
     )
@@ -848,7 +1001,13 @@ function New-TriTierInstallPlan {
         }
         canApply = (
             $Compatibility.compatible -and
-            $ExistingState -ne 'UNMANAGED'
+            (
+                $ExistingState -eq 'MISSING' -or
+                (
+                    $null -ne $ExistingStatus -and
+                    [bool]$ExistingStatus.healthy
+                )
+            )
         )
         sourceRoot = $ResolvedSource
         targetRoot = $ResolvedTarget
@@ -865,6 +1024,12 @@ function New-TriTierInstallPlan {
         fileCount = $SourceFiles.Count + 2
         privateCodexMutation = $false
         pathMutation = $false
+        existingHealth = if ($null -eq $ExistingStatus) {
+            $null
+        }
+        else {
+            $ExistingStatus
+        }
         compatibility = $Compatibility
     }
 }
@@ -894,6 +1059,8 @@ function Get-TriTierInstallStatus {
             installId = ''
             modifiedFiles = @()
             missingFiles = @()
+            unsafePaths = @()
+            reasons = @('Installation target is missing.')
         }
     }
 
@@ -911,12 +1078,16 @@ function Get-TriTierInstallStatus {
             installId = ''
             modifiedFiles = @()
             missingFiles = @()
+            unsafePaths = @()
             reasons = $ManifestCheck.reasons
         }
     }
 
     $ModifiedFiles = [System.Collections.Generic.List[string]]::new()
     $MissingFiles = [System.Collections.Generic.List[string]]::new()
+    $UnsafePaths = [System.Collections.Generic.List[string]]::new()
+    $HealthReasons = [System.Collections.Generic.List[string]]::new()
+    $SeenPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $ManifestFiles = @(
         Get-TriTierInstallProperty `
             -InputObject $Manifest `
@@ -924,45 +1095,64 @@ function Get-TriTierInstallStatus {
             -DefaultValue @()
     )
 
-    foreach ($ManifestFile in $ManifestFiles) {
-        $RelativePath = [string](
-            Get-TriTierInstallProperty `
-                -InputObject $ManifestFile `
-                -Name 'relativePath' `
-                -DefaultValue ''
-        )
-        $ExpectedHash = [string](
-            Get-TriTierInstallProperty `
-                -InputObject $ManifestFile `
-                -Name 'sha256' `
-                -DefaultValue ''
-        )
+    if ($ManifestFiles.Count -eq 0) {
+        $HealthReasons.Add('Installation manifest has no payload files.')
+    }
 
-        if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+    foreach ($ManifestFile in $ManifestFiles) {
+        $RelativePath = [string](Get-TriTierInstallProperty -InputObject $ManifestFile -Name 'relativePath' -DefaultValue '')
+        $ExpectedHash = [string](Get-TriTierInstallProperty -InputObject $ManifestFile -Name 'sha256' -DefaultValue '')
+        $PathCheck = Test-TriTierInstallPathBoundary -Path $RelativePath -AuthorizedRoot $ResolvedTarget -BasePath $ResolvedTarget -AllowExactRoot $false
+
+        if (-not $PathCheck.valid) {
+            $UnsafePaths.Add($RelativePath)
+            $HealthReasons.Add("Unsafe manifest path '$RelativePath': $($PathCheck.reasons -join '; ')")
             continue
         }
 
-        $InstalledPath = Join-Path $ResolvedTarget $RelativePath
+        if (-not $SeenPaths.Add($PathCheck.path)) {
+            $HealthReasons.Add("Duplicate manifest path: $RelativePath")
+            continue
+        }
 
-        if (-not (Test-Path -LiteralPath $InstalledPath -PathType Leaf)) {
+        if ($ExpectedHash -notmatch '^[0-9a-fA-F]{64}$') {
+            $ModifiedFiles.Add($RelativePath)
+            $HealthReasons.Add("Invalid payload hash: $RelativePath")
+            continue
+        }
+
+        if (-not (Test-Path -LiteralPath $PathCheck.path -PathType Leaf)) {
             $MissingFiles.Add($RelativePath)
             continue
         }
 
-        $ActualHash = (
-            Get-FileHash `
-                -LiteralPath $InstalledPath `
-                -Algorithm SHA256
-        ).Hash.ToLowerInvariant()
+        $ActualHash = (Get-FileHash -LiteralPath $PathCheck.path -Algorithm SHA256).Hash.ToLowerInvariant()
 
         if ($ActualHash -ne $ExpectedHash.ToLowerInvariant()) {
             $ModifiedFiles.Add($RelativePath)
         }
     }
 
+    foreach ($RequiredPath in Get-TriTierInstallRequiredRelativePaths) {
+        if (-not $SeenPaths.Contains((Join-Path $ResolvedTarget $RequiredPath))) {
+            $MissingFiles.Add($RequiredPath)
+            $HealthReasons.Add("Required payload entry is missing: $RequiredPath")
+        }
+    }
+
+    if ([bool](Get-TriTierInstallProperty -InputObject $Manifest -Name 'privateCodexMutation' -DefaultValue $false)) {
+        $HealthReasons.Add('Manifest reports private Codex mutation.')
+    }
+
+    if ([bool](Get-TriTierInstallProperty -InputObject $Manifest -Name 'pathMutation' -DefaultValue $false)) {
+        $HealthReasons.Add('Manifest reports PATH mutation.')
+    }
+
     $Healthy = (
         $ModifiedFiles.Count -eq 0 -and
-        $MissingFiles.Count -eq 0
+        $MissingFiles.Count -eq 0 -and
+        $UnsafePaths.Count -eq 0 -and
+        $HealthReasons.Count -eq 0
     )
 
     [PSCustomObject][ordered]@{
@@ -971,15 +1161,148 @@ function Get-TriTierInstallStatus {
         owned = $true
         healthy = $Healthy
         version = [string]$Manifest.version
-        schemaVersion = [int](
-            Get-TriTierInstallProperty `
-                -InputObject $Manifest `
-                -Name 'schemaVersion' `
-                -DefaultValue 1
-        )
+        schemaVersion = [int](Get-TriTierInstallProperty -InputObject $Manifest -Name 'schemaVersion' -DefaultValue 1)
         installId = [string]$Manifest.installId
         modifiedFiles = @($ModifiedFiles)
-        missingFiles = @($MissingFiles)
+        missingFiles = @($MissingFiles | Select-Object -Unique)
+        unsafePaths = @($UnsafePaths)
+        reasons = @($HealthReasons)
+    }
+}
+
+function Test-TriTierInstallJournal {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [object]$Journal,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$TargetRoot
+    )
+
+    $Reasons = [System.Collections.Generic.List[string]]::new()
+    $ResolvedTarget = Get-TriTierInstallFullPath -Path $TargetRoot
+
+    if ($null -eq $Journal) {
+        return [PSCustomObject][ordered]@{
+            valid = $false
+            reasons = @('Recovery journal is missing or unreadable.')
+            targetRoot = $ResolvedTarget
+            operation = ''
+            state = ''
+            operationId = ''
+            stageRoot = ''
+            backupPath = ''
+        }
+    }
+
+    $JournalTarget = [string](Get-TriTierInstallProperty -InputObject $Journal -Name 'targetRoot' -DefaultValue '')
+    $Operation = [string](Get-TriTierInstallProperty -InputObject $Journal -Name 'operation' -DefaultValue '')
+    $State = [string](Get-TriTierInstallProperty -InputObject $Journal -Name 'state' -DefaultValue '')
+    $OperationId = [string](Get-TriTierInstallProperty -InputObject $Journal -Name 'operationId' -DefaultValue '')
+    $JournalSchemaVersion = [int](Get-TriTierInstallProperty -InputObject $Journal -Name 'journalSchemaVersion' -DefaultValue 1)
+    $StageRoot = [string](Get-TriTierInstallProperty -InputObject $Journal -Name 'stageRoot' -DefaultValue '')
+    $BackupPath = [string](Get-TriTierInstallProperty -InputObject $Journal -Name 'backupPath' -DefaultValue '')
+
+    if ([string](Get-TriTierInstallProperty -InputObject $Journal -Name 'product' -DefaultValue '') -ne $script:TriTierInstallProduct) {
+        $Reasons.Add('Recovery journal is not owned by Tri-Tier.')
+    }
+
+    if ($JournalSchemaVersion -ne 1) {
+        $Reasons.Add("Unsupported recovery journal schema: $JournalSchemaVersion")
+    }
+
+    if ($Operation -notin @('INSTALL', 'UPGRADE', 'UNINSTALL')) {
+        $Reasons.Add("Unsupported recovery operation: $Operation")
+    }
+
+    if ($State -notin @('PREPARED', 'STAGED', 'BACKED_UP', 'COMMITTED', 'QUARANTINED')) {
+        $Reasons.Add("Unsupported recovery journal state: $State")
+    }
+
+    if ($OperationId -notmatch '^[0-9a-fA-F]{32}$') {
+        $Reasons.Add('Recovery journal operationId is invalid.')
+    }
+
+    $TargetCheck = Test-TriTierInstallPathBoundary `
+        -Path $JournalTarget `
+        -AuthorizedRoot $ResolvedTarget `
+        -BasePath $ResolvedTarget
+
+    if (
+        -not $TargetCheck.valid -or
+        -not [string]::Equals(
+            $TargetCheck.path,
+            $ResolvedTarget,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    ) {
+        $Reasons.Add('Recovery journal targetRoot does not match the requested target.')
+    }
+
+    $ParentRoot = Split-Path -Parent $ResolvedTarget
+    $StageCheck = $null
+    $BackupCheck = $null
+
+    if (-not [string]::IsNullOrWhiteSpace($StageRoot)) {
+        $StageCheck = Test-TriTierInstallPathBoundary `
+            -Path $StageRoot `
+            -AuthorizedRoot $ParentRoot `
+            -BasePath $ParentRoot `
+            -AllowExactRoot $false
+
+        $ExpectedStageLeaf = ".tri-tier-stage-$OperationId"
+
+        if (
+            -not $StageCheck.valid -or
+            (Split-Path -Leaf $StageCheck.path) -cne $ExpectedStageLeaf
+        ) {
+            $Reasons.Add('Recovery journal stageRoot is outside the transaction boundary.')
+        }
+    }
+    elseif ($Operation -in @('INSTALL', 'UPGRADE')) {
+        $Reasons.Add('Recovery journal stageRoot is required for install transactions.')
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($BackupPath)) {
+        $BackupRoot = Join-Path $ParentRoot '.tri-tier-backups'
+        $BackupCheck = Test-TriTierInstallPathBoundary `
+            -Path $BackupPath `
+            -AuthorizedRoot $BackupRoot `
+            -BasePath $BackupRoot `
+            -AllowExactRoot $false
+        $BackupLeaf = Split-Path -Leaf $BackupCheck.path
+        $TargetLeaf = Split-Path -Leaf $ResolvedTarget
+
+        if (
+            -not $BackupCheck.valid -or
+            -not $BackupLeaf.StartsWith(
+                ($TargetLeaf + '-'),
+                [System.StringComparison]::OrdinalIgnoreCase
+            ) -or
+            -not $BackupLeaf.EndsWith(
+                ('-' + $OperationId),
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+        ) {
+            $Reasons.Add('Recovery journal backupPath is outside the transaction boundary.')
+        }
+    }
+    elseif ($Operation -in @('UPGRADE', 'UNINSTALL')) {
+        $Reasons.Add('Recovery journal backupPath is required for replacement transactions.')
+    }
+
+    [PSCustomObject][ordered]@{
+        valid = ($Reasons.Count -eq 0)
+        reasons = @($Reasons)
+        targetRoot = $ResolvedTarget
+        operation = $Operation
+        state = $State
+        operationId = $OperationId
+        stageRoot = if ($null -eq $StageCheck) { '' } else { $StageCheck.path }
+        backupPath = if ($null -eq $BackupCheck) { '' } else { $BackupCheck.path }
     }
 }
 
@@ -1074,6 +1397,7 @@ function Invoke-TriTierInstall {
 
     $Journal = [ordered]@{
         product = $script:TriTierInstallProduct
+        journalSchemaVersion = 1
         operationId = $OperationId
         operation = if ($ExistingOwned) { 'UPGRADE' } else { 'INSTALL' }
         state = 'PREPARED'
@@ -1395,6 +1719,7 @@ function Invoke-TriTierUninstall {
 
     $Journal = [ordered]@{
         product = $script:TriTierInstallProduct
+        journalSchemaVersion = 1
         operationId = $OperationId
         operation = 'UNINSTALL'
         state = 'PREPARED'
@@ -1494,7 +1819,7 @@ function New-TriTierMigrationPlan {
 
     [PSCustomObject][ordered]@{
         operation = 'MIGRATE'
-        canApply = ($NeedsMigration -and $InstallPlan.canApply)
+        canApply = ($NeedsMigration -and $Status.healthy -and $InstallPlan.canApply)
         targetRoot = $ResolvedTarget
         installId = [string]$Status.installId
         fromVersion = [string]$Status.version
@@ -1503,6 +1828,7 @@ function New-TriTierMigrationPlan {
         toSchemaVersion = $script:TriTierInstallSchemaVersion
         backupRequired = $true
         privateCodexMutation = $false
+        sourceHealth = $Status
         installPlan = $InstallPlan
     }
 }
@@ -1552,6 +1878,44 @@ function Invoke-TriTierMigration {
     }
 }
 
+function Test-TriTierInstallRecoveryPayload {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$PayloadRoot,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ExpectedInstallId
+    )
+
+    $Status = Get-TriTierInstallStatus -TargetRoot $PayloadRoot
+    $Reasons = [System.Collections.Generic.List[string]]::new()
+
+    if (-not $Status.owned -or -not $Status.healthy) {
+        $Reasons.Add(
+            "Recovery payload is unhealthy: $($Status.reasons -join '; ')"
+        )
+    }
+
+    if (
+        -not [string]::Equals(
+            [string]$Status.installId,
+            $ExpectedInstallId,
+            [System.StringComparison]::Ordinal
+        )
+    ) {
+        $Reasons.Add('Recovery payload installId does not match the journal.')
+    }
+
+    [PSCustomObject][ordered]@{
+        valid = ($Reasons.Count -eq 0)
+        status = $Status
+        reasons = @($Reasons)
+    }
+}
+
 function Repair-TriTierInstallation {
     [CmdletBinding()]
     param(
@@ -1565,6 +1929,13 @@ function Repair-TriTierInstallation {
     else {
         Get-TriTierInstallFullPath -Path $TargetRoot
     }
+
+    $TargetCheck = Test-TriTierInstallTarget -TargetRoot $ResolvedTarget
+
+    if (-not $TargetCheck.valid) {
+        throw ('Recovery target is unsafe: ' + ($TargetCheck.reasons -join '; '))
+    }
+
     $RecoveryLockHandle = New-TriTierInstallLockHandle `
         -TargetRoot $ResolvedTarget
 
@@ -1581,44 +1952,72 @@ function Repair-TriTierInstallation {
         }
     }
 
-    if (
-        [string](
-            Get-TriTierInstallProperty `
-                -InputObject $Journal `
-                -Name 'product' `
-                -DefaultValue ''
-        ) -ne $script:TriTierInstallProduct
-    ) {
-        throw 'Recovery journal is not owned by Tri-Tier.'
+    $JournalCheck = Test-TriTierInstallJournal `
+        -Journal $Journal `
+        -TargetRoot $ResolvedTarget
+
+    if (-not $JournalCheck.valid) {
+        throw (
+            'Recovery journal validation failed: ' +
+            ($JournalCheck.reasons -join '; ')
+        )
     }
 
-    $JournalTarget = Get-TriTierInstallFullPath -Path (
-        [string]$Journal.targetRoot
-    )
+    $StageRoot = [string]$JournalCheck.stageRoot
+    $BackupPath = [string]$JournalCheck.backupPath
+    $TargetStatus = Get-TriTierInstallStatus -TargetRoot $ResolvedTarget
+    $BackupPayloadCheck = $null
+    $StagePayloadCheck = $null
 
     if (
-        -not [string]::Equals(
-            $ResolvedTarget,
-            $JournalTarget,
-            [System.StringComparison]::OrdinalIgnoreCase
+        -not [string]::IsNullOrWhiteSpace($BackupPath) -and
+        (Test-Path -LiteralPath $BackupPath)
+    ) {
+        $BackupPayloadCheck = Test-TriTierInstallRecoveryPayload `
+            -PayloadRoot $BackupPath `
+            -ExpectedInstallId ([string]$Journal.installId)
+
+        if (-not $BackupPayloadCheck.valid) {
+            throw (
+                'Recovery backup health validation failed: ' +
+                ($BackupPayloadCheck.reasons -join '; ')
+            )
+        }
+    }
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($StageRoot) -and
+        (Test-Path -LiteralPath $StageRoot)
+    ) {
+        $StagePayloadCheck = Test-TriTierInstallRecoveryPayload `
+            -PayloadRoot $StageRoot `
+            -ExpectedInstallId ([string]$Journal.installId)
+
+        if (-not $StagePayloadCheck.valid) {
+            throw (
+                'Recovery stage health validation failed: ' +
+                ($StagePayloadCheck.reasons -join '; ')
+            )
+        }
+    }
+
+    if (
+        $TargetStatus.status -eq 'UNMANAGED' -or
+        (
+            -not $TargetStatus.owned -and
+            $TargetStatus.status -ne 'NOT_INSTALLED'
         )
     ) {
-        throw 'Recovery journal target does not match the requested target.'
+        throw 'Recovery will not remove an unmanaged target. Manual review is required.'
     }
 
-    $StageRoot = [string](
-        Get-TriTierInstallProperty `
-            -InputObject $Journal `
-            -Name 'stageRoot' `
-            -DefaultValue ''
-    )
-    $BackupPath = [string](
-        Get-TriTierInstallProperty `
-            -InputObject $Journal `
-            -Name 'backupPath' `
-            -DefaultValue ''
-    )
-    $TargetStatus = Get-TriTierInstallStatus -TargetRoot $ResolvedTarget
+    if (
+        -not $TargetStatus.healthy -and
+        $null -eq $BackupPayloadCheck -and
+        $null -eq $StagePayloadCheck
+    ) {
+        throw 'Recovery has no independently healthy recovery material.'
+    }
 
     if ($TargetStatus.owned -and $TargetStatus.healthy) {
         if (
@@ -1685,20 +2084,15 @@ function Repair-TriTierInstallation {
     }
 
     if (
+        -not (Test-Path -LiteralPath $ResolvedTarget) -and
         -not [string]::IsNullOrWhiteSpace($StageRoot) -and
         (Test-Path -LiteralPath $StageRoot)
     ) {
-        Remove-Item -LiteralPath $StageRoot -Recurse -Force
-    }
-
-    if (-not (Test-Path -LiteralPath $ResolvedTarget)) {
-        Remove-Item -LiteralPath $JournalPath -Force
-
         return [PSCustomObject][ordered]@{
-            action = 'REMOVED_PARTIAL_STAGE'
+            action = 'MANUAL_REVIEW_REQUIRED'
             targetRoot = $ResolvedTarget
             journalPath = $JournalPath
-            recovered = $true
+            recovered = $false
         }
     }
 

@@ -95,7 +95,9 @@ $RequiredPaths = @(
     "tests\test-installation.ps1",
     "tests\test-cli-installation.ps1",
     "tests\test-public-docs.ps1",
-    "tests\test-publication-readiness.ps1"
+    "tests\test-publication-readiness.ps1",
+    "tests\test-cli-evidence-reliability.ps1",
+    "tests\test-phase9r-adoption-blockers.ps1"
 )
 
 $Failures = @()
@@ -185,7 +187,9 @@ $TestScripts = @(
     "tests\test-installation.ps1",
     "tests\test-cli-installation.ps1",
     "tests\test-public-docs.ps1",
-    "tests\test-publication-readiness.ps1"
+    "tests\test-publication-readiness.ps1",
+    "tests\test-cli-evidence-reliability.ps1",
+    "tests\test-phase9r-adoption-blockers.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

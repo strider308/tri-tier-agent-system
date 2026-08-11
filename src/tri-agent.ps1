@@ -150,20 +150,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ModulePaths = @{
-    Classification = Join-Path $PSScriptRoot "TriTier\Classification.psm1"
-    Risk = Join-Path $PSScriptRoot "TriTier\Risk.psm1"
+$ModulePaths = [ordered]@{
+    State = Join-Path $PSScriptRoot "TriTier\State.psm1"
     Evidence = Join-Path $PSScriptRoot "TriTier\Evidence.psm1"
     Findings = Join-Path $PSScriptRoot "TriTier\Findings.psm1"
-    FindingLifecycle = Join-Path $PSScriptRoot "TriTier\FindingLifecycle.psm1"
+    Classification = Join-Path $PSScriptRoot "TriTier\Classification.psm1"
+    Risk = Join-Path $PSScriptRoot "TriTier\Risk.psm1"
     TaskFlow = Join-Path $PSScriptRoot "TriTier\TaskFlow.psm1"
+    FindingLifecycle = Join-Path $PSScriptRoot "TriTier\FindingLifecycle.psm1"
     RepairCycle = Join-Path $PSScriptRoot "TriTier\RepairCycle.psm1"
     Orchestration = Join-Path $PSScriptRoot "TriTier\Orchestration.psm1"
     PhaseGate = Join-Path $PSScriptRoot "TriTier\PhaseGate.psm1"
     AgentProfiles = Join-Path $PSScriptRoot "TriTier\AgentProfiles.psm1"
     Installation = Join-Path $PSScriptRoot "TriTier\Installation.psm1"
     ExecutionLoop = Join-Path $PSScriptRoot "TriTier\ExecutionLoop.psm1"
-    State = Join-Path $PSScriptRoot "TriTier\State.psm1"
 }
 
 foreach ($Entry in $ModulePaths.GetEnumerator()) {
@@ -171,7 +171,7 @@ foreach ($Entry in $ModulePaths.GetEnumerator()) {
         throw "Tri-Tier module not found: $($Entry.Value)"
     }
 
-    Import-Module $Entry.Value -Force
+    Import-Module $Entry.Value
 }
 
 function New-TriTierCliFlowResult {
