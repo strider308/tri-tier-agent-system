@@ -166,3 +166,10 @@ All notable changes will be documented here.
 - Added a contributor workflow covering authority boundaries, PowerShell discipline, targeted tests, full verification, and publication hygiene.
 - Added documentation link, command coverage, parameter inventory, and example safety regressions.
 - Kept the CLI version at `0.10.0-alpha`; Phase 7 changes public documentation and contributor experience only.
+
+### Phase 8 publication readiness
+
+- Prepared local security, support, release-note, issue-template, and pull-request guidance for the `v0.1.0-alpha` repository prerelease.
+- Added an offline publication-readiness test covering public files, privacy boundaries, version distinction, documentation links, CI behavior, and template safety.
+- Hardened public CI to target `main`, use read-only contents permissions, avoid persisted checkout credentials, and run both the repository verifier and CLI doctor.
+- Kept the CLI milestone at `0.10.0-alpha`; `v0.1.0-alpha` is the repository release identifier.

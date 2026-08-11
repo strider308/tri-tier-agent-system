@@ -10,11 +10,13 @@ Tri-Tier separates software work across three responsibilities:
 
 ## Status
 
-`0.4.0-alpha`
+The first public repository prerelease is targeted as `v0.1.0-alpha`.
+The CLI currently reports `0.10.0-alpha`; these are separate repository and
+CLI version identifiers.
 
-The current release contains canonical agent definitions, task routing,
-R0-R4 risk classification, and E0-E5 evidence enforcement. Persistent run
-state, review/repair cycles, and phase gates are under active development.
+The current baseline contains canonical agent definitions, task routing,
+R0-R4 risk classification, E0-E5 evidence enforcement, persistent run state,
+review/repair cycles, phase gates, and isolated installation/recovery.
 
 ## Execution direction
 
@@ -104,6 +106,9 @@ Read or update run status:
 - [Command reference](docs/command-reference.md)
 - [Runnable examples](examples/README.md)
 - [Contributor workflow](docs/contributor-workflow.md)
+- [Security policy](SECURITY.md)
+- [Support](SUPPORT.md)
+- [v0.1.0-alpha release notes](docs/release-v0.1.0-alpha.md)
 
 The public command reference is mechanically checked against the live CLI command cases.
 <!-- END TRI-TIER PUBLIC DOCS -->

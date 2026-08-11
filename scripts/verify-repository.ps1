@@ -14,6 +14,7 @@ $RequiredPaths = @(
     "NOTICE",
     "README.md",
     "SECURITY.md",
+    "SUPPORT.md",
     "CONTRIBUTING.md",
     "AGENTS.md",
     "CHANGELOG.md",
@@ -39,6 +40,7 @@ $RequiredPaths = @(
     "docs\recovery.md",
     "docs\command-reference.md",
     "docs\quickstart.md",
+    "docs\release-v0.1.0-alpha.md",
     "docs\contributor-workflow.md",
     "examples\README.md",
     "examples\diagnostics.ps1",
@@ -92,7 +94,8 @@ $RequiredPaths = @(
     "tests\test-agent-handoffs.ps1",
     "tests\test-installation.ps1",
     "tests\test-cli-installation.ps1",
-    "tests\test-public-docs.ps1"
+    "tests\test-public-docs.ps1",
+    "tests\test-publication-readiness.ps1"
 )
 
 $Failures = @()
@@ -181,7 +184,8 @@ $TestScripts = @(
     "tests\test-agent-handoffs.ps1",
     "tests\test-installation.ps1",
     "tests\test-cli-installation.ps1",
-    "tests\test-public-docs.ps1"
+    "tests\test-public-docs.ps1",
+    "tests\test-publication-readiness.ps1"
 )
 
 foreach ($TestScript in $TestScripts) {

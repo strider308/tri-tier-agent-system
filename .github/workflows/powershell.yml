@@ -2,7 +2,11 @@ name: PowerShell validation
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -10,11 +14,18 @@ permissions:
 jobs:
   verify:
     runs-on: windows-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Verify repository
         shell: pwsh
         run: ./scripts/verify-repository.ps1
+
+      - name: Run CLI doctor
+        shell: pwsh
+        run: ./src/tri-agent.ps1 doctor
