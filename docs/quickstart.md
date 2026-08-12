@@ -1,74 +1,104 @@
 # Quickstart
 
-Tri-Tier Agent System is designed to keep routing, durable state, evidence, review authority, and recovery explicit. Start with diagnostics, then use the subsystem-specific commands that match the work you are doing.
+This is the public technical-alpha path. It is currently validated primarily on Windows with PowerShell 7 and Git. Use a compatible coding-agent harness when you want actual agent dispatch; the CLI and durable workflow can be inspected without one.
 
-## 1. Verify the CLI
+## 1. Clone and pin the release
 
-From the repository root:
+```powershell
+git clone https://github.com/strider308/tri-tier-agent-system.git
+Set-Location .\tri-tier-agent-system
+git checkout v0.1.1-alpha
+```
+
+The detached-tag checkout is intentional: it pins the tested alpha runtime. The current repository release is `v0.1.1-alpha`; the CLI reports `0.10.0-alpha`.
+
+## 2. Verify the checkout
 
 ```powershell
 pwsh -NoProfile -File .\src\tri-agent.ps1 version
 pwsh -NoProfile -File .\src\tri-agent.ps1 doctor
 ```
 
-The current Phase 7 baseline remains `0.10.0-alpha`. Phase 7 is documentation-only and does not change runtime semantics or the CLI version.
-
-## 2. Classify a task
-
-Use the classifier before deciding which agent tier should own the work:
-
-```powershell
-pwsh -NoProfile -File .\src\tri-agent.ps1 classify `
-    -Task "Update documentation for a low-risk feature" `
-    -Json
-```
-
-The routing and risk model are explained in [risk-model.md](risk-model.md) and [evidence-model.md](evidence-model.md).
-
 ## 3. Plan an isolated installation
 
-Planning is read-only:
+The default root is `%LOCALAPPDATA%\TriTierAgentSystem\isolated`. Planning is read-only.
 
 ```powershell
-$InstallRoot = Join-Path $HOME '.tri-tier-agent-system'
+$TriTierRoot = Join-Path $env:LOCALAPPDATA 'TriTierAgentSystem\isolated'
 
 pwsh -NoProfile -File .\src\tri-agent.ps1 compatibility-check `
-    -InstallRoot $InstallRoot `
-    -Json
+    -InstallRoot $TriTierRoot -Json
 
 pwsh -NoProfile -File .\src\tri-agent.ps1 install-plan `
-    -InstallRoot $InstallRoot `
-    -Json
+    -InstallRoot $TriTierRoot -Json
 ```
 
-Review the plan before using an apply command. Installation ownership, explicit confirmations, migration, quarantine uninstall, and recovery are documented in [installation.md](installation.md), [migration.md](migration.md), and [recovery.md](recovery.md).
+Review the plan before applying it. The installer rejects unsafe, overlapping, unmanaged, or reparse-point targets.
 
-## 4. Work with durable state
+## 4. Apply and inspect the installation
 
-The durable-state lifecycle is documented in [state-model.md](state-model.md). Finding lifecycle, task flow, repair, phase gates, and automatic execution are documented separately so each transition remains reviewable:
-
-- [finding-lifecycle.md](finding-lifecycle.md)
-- [cli-flow.md](cli-flow.md)
-- [repair-cycle.md](repair-cycle.md)
-- [cli-phase.md](cli-phase.md)
-- [cli-exec.md](cli-exec.md)
-
-## 5. Use dry-run execution before dispatch
-
-Once a run exists, inspect the next automatic dispatch without executing it:
+Applying requires the exact normalized target confirmation:
 
 ```powershell
-pwsh -NoProfile -File .\src\tri-agent.ps1 exec `
-    -ProjectPath <project-path> `
-    -RunId <run-id> `
-    -DryRun `
+pwsh -NoProfile -File .\src\tri-agent.ps1 install-apply `
+    -InstallRoot $TriTierRoot `
+    -ConfirmInstallRoot $TriTierRoot `
     -Json
+
+pwsh -NoProfile -File .\src\tri-agent.ps1 install-status `
+    -InstallRoot $TriTierRoot -Json
 ```
 
-The result includes the selected durable stage, responsible party, profile, and structured handoff information when applicable.
+The installation is isolated from the source checkout, does not modify `PATH`, does not install into `$HOME\.codex`, and does not alter `CODEX_HOME`.
 
-## 6. Use the complete command reference
+## 5. Launch the installed copy
 
-See [command-reference.md](command-reference.md) for the live public command surface and CLI parameter inventory.
+The installed PowerShell launcher is:
 
-Runnable examples are in [../examples/README.md](../examples/README.md).
+```powershell
+& "$TriTierRoot\bin\tri-agent.ps1" version
+& "$TriTierRoot\bin\tri-agent.ps1" doctor
+```
+
+The CMD launcher is `$TriTierRoot\bin\tri-agent.cmd`:
+
+```powershell
+cmd.exe /d /c "`"$TriTierRoot\bin\tri-agent.cmd`" version"
+```
+
+Run these from an unrelated working directory to verify the installed copy is not relying on the repository checkout.
+
+## 6. Safe first workflow
+
+Classification is read-only and does not change a project:
+
+```powershell
+& "$TriTierRoot\bin\tri-agent.ps1" classify `
+    -Prompt 'Document a low-risk feature' -Json
+```
+
+For a durable workflow, initialize a run, checkpoint it, and resume it from persisted state:
+
+```powershell
+& "$TriTierRoot\bin\tri-agent.ps1" run-init `
+    -ProjectPath 'C:\path\to\project' `
+    -RunId 'feature-audit' `
+    -Title 'Feature audit' `
+    -NextAction 'Prepare TASK-001.'
+
+& "$TriTierRoot\bin\tri-agent.ps1" run-checkpoint `
+    -ProjectPath 'C:\path\to\project' `
+    -RunId 'feature-audit' `
+    -Summary 'Checkpoint captured.' `
+    -NextAction 'Resume the bounded workflow.'
+
+& "$TriTierRoot\bin\tri-agent.ps1" run-resume `
+    -ProjectPath 'C:\path\to\project' `
+    -RunId 'feature-audit'
+```
+
+Use `exec -DryRun` to inspect an automatic dispatch without executing it. See the [command reference](command-reference.md), [state model](state-model.md), [repair cycle](repair-cycle.md), and [execution loop](execution-loop.md) for the next steps.
+
+## 7. Uninstall or recover
+
+Uninstall is planned first and requires the current `installId`; it moves the owned installation into a sibling backup instead of deleting it. Interrupted operations can be inspected and recovered with `install-status` and `install-recover`. See [installation](installation.md), [migration](migration.md), and [recovery](recovery.md).

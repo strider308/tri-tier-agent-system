@@ -2,7 +2,7 @@
 param(
     [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
 
-    [string]$InstallRoot = (Join-Path $HOME '.tri-tier-agent-system')
+    [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'TriTierAgentSystem\isolated')
 )
 
 $ErrorActionPreference = 'Stop'
