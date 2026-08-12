@@ -21,7 +21,7 @@ pwsh -NoProfile -File .\examples\classify-task.ps1 `
 
 ## Plan an isolated installation
 
-[plan-isolated-install.ps1](plan-isolated-install.ps1) runs only read-only compatibility and installation planning commands.
+[plan-isolated-install.ps1](plan-isolated-install.ps1) runs only read-only compatibility and installation planning commands against the default isolated root `%LOCALAPPDATA%\TriTierAgentSystem\isolated`.
 
 ```powershell
 pwsh -NoProfile -File .\examples\plan-isolated-install.ps1
