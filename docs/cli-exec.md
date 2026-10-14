@@ -74,6 +74,17 @@ The normalized result includes:
 - stop reason;
 - exact next action.
 
+When a dispatch marker exists, `recovery` includes its action key, attempt,
+envelope/result paths and start time. A running marker is
+`PENDING_ACKNOWLEDGEMENT`; a failed or interrupted marker is `UNRESOLVED`.
+These paths are reported as stored references; status does not read their
+contents or certify external effects. `automaticRetryAllowed` is false.
+
+`canContinue` is false while a marker exists even if the orchestration decision
+allows work. `orchestrationCanContinue` and `orchestrationNextAction` preserve the
+underlying decision separately. `nextAction` directs inspection and reconciliation
+instead of suggesting another implementation dispatch. Status is read-only.
+
 ## Stop behavior
 
 The command returns without dispatch when the durable decision requires:

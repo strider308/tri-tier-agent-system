@@ -575,6 +575,21 @@ function New-TriTierCliExecutionResult {
             -DefaultValue $null
     }
 
+    $InFlight = Get-TriTierCliObjectProperty -InputObject $LoopState -Name 'inFlight' -DefaultValue $null
+    $OrchestrationCanContinue = [bool](Get-TriTierCliObjectProperty -InputObject $Decision -Name 'canContinue' -Required)
+    $OrchestrationNextAction = [string](Get-TriTierCliObjectProperty -InputObject $Decision -Name 'nextAction' -Required)
+    $Recovery = if ($null -eq $InFlight) { $null } else {
+        [PSCustomObject][ordered]@{
+            outcome = if ([string]$LoopState.status -eq 'RUNNING') { 'PENDING_ACKNOWLEDGEMENT' } else { 'UNRESOLVED' }
+            actionKey = [string](Get-TriTierCliObjectProperty -InputObject $InFlight -Name 'actionKey' -Required)
+            attempt = [int](Get-TriTierCliObjectProperty -InputObject $InFlight -Name 'attempt' -DefaultValue 0)
+            envelopePath = [string](Get-TriTierCliObjectProperty -InputObject $InFlight -Name 'envelopePath' -DefaultValue '')
+            resultPath = [string](Get-TriTierCliObjectProperty -InputObject $InFlight -Name 'resultPath' -DefaultValue '')
+            startedUtc = [string](Get-TriTierCliObjectProperty -InputObject $InFlight -Name 'startedUtc' -DefaultValue '')
+            automaticRetryAllowed = $false
+        }
+    }
+
     [PSCustomObject][ordered]@{
         runId = [string](
             Get-TriTierCliObjectProperty `
@@ -618,12 +633,9 @@ function New-TriTierCliExecutionResult {
                 -Name 'blockedScope' `
                 -DefaultValue 'NONE'
         )
-        canContinue = [bool](
-            Get-TriTierCliObjectProperty `
-                -InputObject $Decision `
-                -Name 'canContinue' `
-                -Required
-        )
+        canContinue = $OrchestrationCanContinue -and ($null -eq $InFlight)
+        orchestrationCanContinue = $OrchestrationCanContinue
+        recovery = $Recovery
         ownerRequired = [bool](
             Get-TriTierCliObjectProperty `
                 -InputObject $Decision `
@@ -655,7 +667,7 @@ function New-TriTierCliExecutionResult {
                 -DefaultValue $false
         )
         actionKey = if ($null -eq $Envelope) {
-            ''
+            if ($null -eq $Recovery) { '' } else { $Recovery.actionKey }
         }
         else {
             [string](
@@ -721,12 +733,10 @@ function New-TriTierCliExecutionResult {
                 -Name 'stopReason' `
                 -DefaultValue ''
         )
-        nextAction = [string](
-            Get-TriTierCliObjectProperty `
-                -InputObject $Decision `
-                -Name 'nextAction' `
-                -Required
-        )
+        nextAction = if ($null -eq $Recovery) { $OrchestrationNextAction } else {
+            'Inspect the preserved dispatch and actual effects; reconciliation is required before another dispatch.'
+        }
+        orchestrationNextAction = $OrchestrationNextAction
         updatedUtc = [string](
             Get-TriTierCliObjectProperty `
                 -InputObject $LoopState `

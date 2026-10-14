@@ -21,6 +21,23 @@ exit 9
     try { [void](Invoke-TriTierRunExecutionLoop -ProjectPath $Root -RunId 'unknown' -DispatcherPath $Dispatcher -MaxSteps 1 -StepTimeoutSeconds 10) }
     catch { $FirstFailed = $true }
     if (-not $FirstFailed) { throw 'First dispatch must fail after the synthetic effect.' }
+    if ($Mode -eq 'candidate') {
+        $Files = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName)
+        $BeforeStatus = @($Files | ForEach-Object { $_.FullName + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join "`n"
+        $Cli = Join-Path $RepositoryRoot 'src/tri-agent.ps1'
+        $StatusText = & (Get-Process -Id $PID).Path -NoProfile -File $Cli exec-status -ProjectPath $Root -RunId 'unknown' -Json
+        if ($LASTEXITCODE -ne 0) { throw 'Read-only recovery status failed.' }
+        $Status = ($StatusText -join "`n") | ConvertFrom-Json
+        if ($Status.canContinue -or -not $Status.orchestrationCanContinue -or $Status.recovery.outcome -ne 'UNRESOLVED' -or $Status.recovery.automaticRetryAllowed) {
+            throw 'Recovery status must distinguish orchestration permission from blocked execution.'
+        }
+        if ([string]::IsNullOrWhiteSpace($Status.actionKey) -or $Status.actionKey -ne $Status.recovery.actionKey -or [string]::IsNullOrWhiteSpace($Status.recovery.envelopePath) -or [string]::IsNullOrWhiteSpace($Status.recovery.resultPath)) {
+            throw 'Recovery status omitted the preserved action or evidence paths.'
+        }
+        $AfterFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName)
+        $AfterStatus = @($AfterFiles | ForEach-Object { $_.FullName + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join "`n"
+        if ($BeforeStatus -ne $AfterStatus) { throw 'Recovery inspection mutated the fixture evidence.' }
+    }
     $Result = $null
     try { $Result = Resume-TriTierRunExecutionLoop -ProjectPath $Root -RunId 'unknown' -MaxSteps 1 -StepTimeoutSeconds 10 }
     catch { if ($Mode -eq 'candidate') { throw } }
