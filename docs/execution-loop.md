@@ -102,11 +102,19 @@ or false `NO_CHANGE` result fails closed.
 ## Restart recovery
 
 Before dispatch, the loop persists an `inFlight` record. If the process stops
-after that write, `exec-resume` records an interrupted-action recovery event,
-recomputes the current action, and retries only within the configured attempt
-limit.
+after that write, or the dispatcher fails before a valid acknowledgement, the
+outcome is unresolved: an effect may already have happened. The marker is
+preserved. `exec-resume` returns `PAUSED_BLOCKED` without another dispatch,
+including when a different dispatcher path or retry budget is supplied.
 
-The dispatcher must therefore be idempotent for a stable `actionKey`.
+Inspect the envelope, result, durable run state and actual effects before any
+continuation. There is no automatic reconcile or force-retry command. A reviewed
+reconciliation procedure is required; deleting the marker, changing RunId or
+starting another run is not evidence that an effect did not happen.
+
+Dispatcher idempotency for a stable `actionKey` remains necessary. This run-local
+block does not guarantee exactly-once effects across runs or providers, and it
+cannot restore markers cleared by older versions.
 
 ## Safety limits
 

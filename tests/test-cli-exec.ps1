@@ -313,6 +313,10 @@ try {
         -Expected 'STOP' `
         -Actual $Status.Json.stage
 
+    Assert-Equal -Name 'Completed loop has no recovery obligation' -Expected $null -Actual $Status.Json.recovery
+    Assert-Equal -Name 'Terminal orchestration cannot continue' -Expected $false -Actual $Status.Json.orchestrationCanContinue
+    Assert-Equal -Name 'Terminal execution cannot continue' -Expected $false -Actual $Status.Json.canContinue
+
     $Resume = Invoke-TestCli `
         -Arguments @(
             'exec-resume'

@@ -861,14 +861,6 @@ function Initialize-TriTierRunExecutionLoopCore {
         -AllowMissing
 
     if ($null -ne $Existing) {
-        $Existing.dispatcherPath = [System.IO.Path]::GetFullPath(
-            $DispatcherPath
-        )
-        $Existing.maxSteps = $MaxSteps
-        $Existing.maxSameDecision = $MaxSameDecision
-        $Existing.maxAttemptsPerAction = $MaxAttemptsPerAction
-        $Existing.stepTimeoutSeconds = $StepTimeoutSeconds
-
         if ($null -ne $Existing.inFlight) {
             $Existing.status = 'RECOVERING'
             $Existing = Add-TriTierExecutionHistoryEvent `
@@ -876,8 +868,8 @@ function Initialize-TriTierRunExecutionLoopCore {
                 -EventType 'INTERRUPTED_ACTION_RECOVERED' `
                 -ActionKey ([string]$Existing.inFlight.actionKey) `
                 -Summary (
-                    'Recovered an interrupted in-flight action and will ' +
-                    're-evaluate it before dispatch.'
+                    'Recovered an interrupted in-flight action. ' +
+                    'Its outcome must be reconciled before another dispatch.'
                 )
         }
         elseif ($Existing.status -notin @(
@@ -885,6 +877,16 @@ function Initialize-TriTierRunExecutionLoopCore {
             'ABORTED'
         )) {
             $Existing.status = 'IDLE'
+        }
+
+        if ($null -eq $Existing.inFlight) {
+            $Existing.dispatcherPath = [System.IO.Path]::GetFullPath(
+                $DispatcherPath
+            )
+            $Existing.maxSteps = $MaxSteps
+            $Existing.maxSameDecision = $MaxSameDecision
+            $Existing.maxAttemptsPerAction = $MaxAttemptsPerAction
+            $Existing.stepTimeoutSeconds = $StepTimeoutSeconds
         }
 
         return Save-TriTierRunExecutionLoop `
@@ -1462,7 +1464,9 @@ function Invoke-TriTierRunExecutionLoopCore {
         -RunId $RunId
 
     if ($DryRun) {
-        $DryRunLoop = [PSCustomObject][ordered]@{
+        $StoredLoop = Get-TriTierRunExecutionLoop -ProjectPath $ProjectPath -RunId $RunId -AllowMissing
+        $DryRunLoop = if ($null -ne $StoredLoop) { $StoredLoop } else {
+        [PSCustomObject][ordered]@{
             schemaVersion = $script:ExecutionLoopSchemaVersion
             runId = $RunId
             status = 'IDLE'
@@ -1483,6 +1487,7 @@ function Invoke-TriTierRunExecutionLoopCore {
             revision = 0
             createdUtc = [DateTime]::UtcNow.ToString('o')
             updatedUtc = [DateTime]::UtcNow.ToString('o')
+        }
         }
 
         $DryRunActionKey = Get-TriTierExecutionActionKey `
@@ -1528,6 +1533,22 @@ function Invoke-TriTierRunExecutionLoopCore {
         -MaxSameDecision $MaxSameDecision `
         -MaxAttemptsPerAction $MaxAttemptsPerAction `
         -StepTimeoutSeconds $StepTimeoutSeconds
+
+    # A missing/invalid acknowledgement cannot establish whether effects happened.
+    # Preserve the existing action record; changing dispatcher or retry budget does not resolve it.
+    if ($null -ne $LoopState.inFlight) {
+        $LoopState.status = 'PAUSED_BLOCKED'
+        $LoopState.stopReason = 'Dispatch outcome unresolved. Reconcile effects before execution can continue.'
+        $LoopState = Add-TriTierExecutionHistoryEvent `
+            -LoopState $LoopState `
+            -EventType 'DISPATCH_OUTCOME_UNRESOLVED' `
+            -ActionKey ([string]$LoopState.inFlight.actionKey) `
+            -Summary $LoopState.stopReason
+        $LoopState = Save-TriTierRunExecutionLoop `
+            -ProjectPath $ProjectPath -RunId $RunId -LoopState $LoopState
+        return New-TriTierExecutionInvocationResult `
+            -LoopState $LoopState -RunState $RunState -Decision $Decision
+    }
 
     $WasDispatched = $false
     $LastEnvelope = $null
@@ -1857,7 +1878,7 @@ function Invoke-TriTierRunExecutionLoopCore {
             $FailureMessage = $_.Exception.Message
             $LoopState.status = 'FAILED'
             $LoopState.stopReason = $FailureMessage
-            $LoopState.inFlight = $null
+            # Keep the in-flight record: dispatch may have already produced effects.
             $LoopState = Add-TriTierExecutionHistoryEvent `
                 -LoopState $LoopState `
                 -EventType 'DISPATCH_FAILED' `

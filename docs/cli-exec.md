@@ -14,6 +14,10 @@ tri-agent exec `
 
 Dry-run mode reads the durable state and returns the next orchestration envelope.
 It does not create execution-loop state and does not invoke a dispatcher.
+When loop state already exists, the preview retains its status and unresolved
+marker instead of displaying a fresh IDLE loop. `actionKey` identifies that
+preserved marker; `previewActionKey` identifies the proposed envelope separately.
+An unresolved preview keeps `canContinue=false` and does not authorize dispatch.
 
 ## Run automatically
 
@@ -43,7 +47,11 @@ tri-agent exec-resume `
 ```
 
 Resume uses the dispatcher path stored in durable execution-loop state unless a
-replacement `DispatcherPath` is supplied.
+replacement `DispatcherPath` is supplied and there is no unresolved in-flight
+action. An unresolved action returns `PAUSED_BLOCKED` without dispatch and keeps
+the original dispatcher identity. Inspect `exec-status`, the saved envelope,
+result and effects. This CLI has no automatic reconcile or force-retry command;
+see [Restart recovery](execution-loop.md#restart-recovery).
 
 ## Inspect execution state
 
@@ -69,6 +77,17 @@ The normalized result includes:
 - dispatcher path;
 - stop reason;
 - exact next action.
+
+When a dispatch marker exists, `recovery` includes its action key, attempt,
+envelope/result paths and start time. A running marker is
+`PENDING_ACKNOWLEDGEMENT`; a failed or interrupted marker is `UNRESOLVED`.
+These paths are reported as stored references; status does not read their
+contents or certify external effects. `automaticRetryAllowed` is false.
+
+`canContinue` is false while a marker exists even if the orchestration decision
+allows work. `orchestrationCanContinue` and `orchestrationNextAction` preserve the
+underlying decision separately. `nextAction` directs inspection and reconciliation
+instead of suggesting another implementation dispatch. Status is read-only.
 
 ## Stop behavior
 

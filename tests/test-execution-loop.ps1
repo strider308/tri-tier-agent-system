@@ -641,8 +641,8 @@ try {
         -StepTimeoutSeconds 30
 
     Assert-Equal `
-        -Name 'Interrupted execution can resume to completion' `
-        -Expected 'COMPLETE' `
+        -Name 'Interrupted outcome blocks execution pending reconciliation' `
+        -Expected 'PAUSED_BLOCKED' `
         -Actual $RecoveredResult.loop.status
     Assert-True `
         -Name 'Interrupted execution recovery is recorded' `
@@ -682,8 +682,8 @@ try {
         -StepTimeoutSeconds 30
 
     Assert-Equal `
-        -Name 'Failed attempt uses retry budget instead of stall budget' `
-        -Expected 'COMPLETE' `
+        -Name 'Failed acknowledgement blocks retry pending reconciliation' `
+        -Expected 'PAUSED_BLOCKED' `
         -Actual $RetryResult.loop.status
 
     $LockRunId = 'execution-concurrent-lock'
@@ -758,10 +758,9 @@ try {
         -Name 'Dispatcher contract failure is durable' `
         -Expected 'FAILED' `
         -Actual $InvalidLoop.status
-    Assert-Equal `
-        -Name 'Failed dispatch clears in-flight marker' `
-        -Expected $null `
-        -Actual $InvalidLoop.inFlight
+    Assert-True `
+        -Name 'Failed dispatch preserves unresolved in-flight marker' `
+        -Value ($null -ne $InvalidLoop.inFlight)
 
     Write-Host ''
     Write-Host 'Durable automatic execution-loop tests passed.' -ForegroundColor Green
