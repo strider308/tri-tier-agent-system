@@ -666,8 +666,11 @@ function New-TriTierCliExecutionResult {
                 -Name 'dryRun' `
                 -DefaultValue $false
         )
-        actionKey = if ($null -eq $Envelope) {
-            if ($null -eq $Recovery) { '' } else { $Recovery.actionKey }
+        actionKey = if ($null -ne $Recovery) {
+            $Recovery.actionKey
+        }
+        elseif ($null -eq $Envelope) {
+            ''
         }
         else {
             [string](
@@ -677,6 +680,9 @@ function New-TriTierCliExecutionResult {
                     -DefaultValue ''
             )
         }
+        previewActionKey = if ($null -ne $Envelope -and [bool](Get-TriTierCliObjectProperty -InputObject $ExecutionResult -Name 'dryRun' -DefaultValue $false)) {
+            [string](Get-TriTierCliObjectProperty -InputObject $Envelope -Name 'actionKey' -DefaultValue '')
+        } else { '' }
         profileName = if ($null -eq $Envelope) {
             ''
         }

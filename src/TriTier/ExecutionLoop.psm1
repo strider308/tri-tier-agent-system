@@ -1464,7 +1464,9 @@ function Invoke-TriTierRunExecutionLoopCore {
         -RunId $RunId
 
     if ($DryRun) {
-        $DryRunLoop = [PSCustomObject][ordered]@{
+        $StoredLoop = Get-TriTierRunExecutionLoop -ProjectPath $ProjectPath -RunId $RunId -AllowMissing
+        $DryRunLoop = if ($null -ne $StoredLoop) { $StoredLoop } else {
+        [PSCustomObject][ordered]@{
             schemaVersion = $script:ExecutionLoopSchemaVersion
             runId = $RunId
             status = 'IDLE'
@@ -1485,6 +1487,7 @@ function Invoke-TriTierRunExecutionLoopCore {
             revision = 0
             createdUtc = [DateTime]::UtcNow.ToString('o')
             updatedUtc = [DateTime]::UtcNow.ToString('o')
+        }
         }
 
         $DryRunActionKey = Get-TriTierExecutionActionKey `

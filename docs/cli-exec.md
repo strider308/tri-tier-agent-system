@@ -14,6 +14,10 @@ tri-agent exec `
 
 Dry-run mode reads the durable state and returns the next orchestration envelope.
 It does not create execution-loop state and does not invoke a dispatcher.
+When loop state already exists, the preview retains its status and unresolved
+marker instead of displaying a fresh IDLE loop. `actionKey` identifies that
+preserved marker; `previewActionKey` identifies the proposed envelope separately.
+An unresolved preview keeps `canContinue=false` and does not authorize dispatch.
 
 ## Run automatically
 

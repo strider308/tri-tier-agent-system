@@ -34,6 +34,12 @@ exit 9
         if ([string]::IsNullOrWhiteSpace($Status.actionKey) -or $Status.actionKey -ne $Status.recovery.actionKey -or [string]::IsNullOrWhiteSpace($Status.recovery.envelopePath) -or [string]::IsNullOrWhiteSpace($Status.recovery.resultPath)) {
             throw 'Recovery status omitted the preserved action or evidence paths.'
         }
+        $PreviewText = & (Get-Process -Id $PID).Path -NoProfile -File $Cli exec -ProjectPath $Root -RunId 'unknown' -DryRun -Json
+        if ($LASTEXITCODE -ne 0) { throw 'Recovery dry-run preview failed.' }
+        $Preview = ($PreviewText -join "`n") | ConvertFrom-Json
+        if (-not $Preview.dryRun -or $Preview.canContinue -or $null -eq $Preview.recovery -or $Preview.actionKey -ne $Status.actionKey) {
+            throw 'Dry-run preview hid the preserved unresolved action.'
+        }
         $AfterFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName)
         $AfterStatus = @($AfterFiles | ForEach-Object { $_.FullName + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join "`n"
         if ($BeforeStatus -ne $AfterStatus) { throw 'Recovery inspection mutated the fixture evidence.' }
