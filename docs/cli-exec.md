@@ -43,7 +43,11 @@ tri-agent exec-resume `
 ```
 
 Resume uses the dispatcher path stored in durable execution-loop state unless a
-replacement `DispatcherPath` is supplied.
+replacement `DispatcherPath` is supplied and there is no unresolved in-flight
+action. An unresolved action returns `PAUSED_BLOCKED` without dispatch and keeps
+the original dispatcher identity. Inspect `exec-status`, the saved envelope,
+result and effects. This CLI has no automatic reconcile or force-retry command;
+see [Restart recovery](execution-loop.md#restart-recovery).
 
 ## Inspect execution state
 
